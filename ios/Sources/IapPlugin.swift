@@ -1,0 +1,317 @@
+import SwiftRs
+import Tauri
+import UIKit
+import WebKit
+import StoreKit
+
+class InitializeArgs: Decodable {}
+
+class GetProductsArgs: Decodable {
+    let productIds: [String]
+    let productType: String
+}
+
+class PurchaseArgs: Decodable {
+    let productId: String
+    let offerToken: String?
+}
+
+class RestorePurchasesArgs: Decodable {}
+
+class GetPurchaseHistoryArgs: Decodable {}
+
+class AcknowledgePurchaseArgs: Decodable {
+    let purchaseToken: String
+}
+
+@available(iOS 15.0, *)
+class IapPlugin: Plugin {
+    private var updateListenerTask: Task<Void, Error>?
+    
+    override func onWebviewCreated() {
+        super.onWebviewCreated()
+        
+        // Start listening for transaction updates
+        updateListenerTask = Task {
+            for await update in Transaction.updates {
+                await self.handleTransactionUpdate(update)
+            }
+        }
+    }
+    
+    deinit {
+        updateListenerTask?.cancel()
+    }
+    
+    @objc public func initialize(_ invoke: Invoke) throws {
+        // StoreKit 2 doesn't require explicit initialization
+        invoke.resolve(["success": true])
+    }
+    
+    @objc public func getProducts(_ invoke: Invoke) async throws {
+        let args = try invoke.parseArgs(GetProductsArgs.self)
+        
+        do {
+            let products = try await Product.products(for: args.productIds)
+            var productsArray: [[String: Any]] = []
+            
+            for product in products {
+                var productDict: [String: Any] = [
+                    "productId": product.id,
+                    "title": product.displayName,
+                    "description": product.description,
+                    "productType": product.type.rawValue
+                ]
+                
+                // Add pricing information
+                productDict["formattedPrice"] = product.displayPrice
+                productDict["priceCurrencyCode"] = product.priceFormatStyle.locale.currency?.identifier ?? ""
+                
+                // Handle subscription-specific information
+                if product.type == .autoRenewable || product.type == .nonRenewable {
+                    if let subscription = product.subscription {
+                        var subscriptionOffers: [[String: Any]] = []
+                        
+                        // Add introductory offer if available
+                        if let introOffer = subscription.introductoryOffer {
+                            let offer: [String: Any] = [
+                                "offerToken": "",  // iOS doesn't use offer tokens
+                                "basePlanId": "",
+                                "offerId": introOffer.id ?? "",
+                                "pricingPhases": [[
+                                    "formattedPrice": introOffer.displayPrice,
+                                    "priceCurrencyCode": product.priceFormatStyle.locale.currency?.identifier ?? "",
+                                    "priceAmountMicros": 0,  // Not available in StoreKit 2
+                                    "billingPeriod": formatSubscriptionPeriod(introOffer.period),
+                                    "billingCycleCount": introOffer.periodCount,
+                                    "recurrenceMode": 0
+                                ]]
+                            ]
+                            subscriptionOffers.append(offer)
+                        }
+                        
+                        // Add regular subscription info
+                        let regularOffer: [String: Any] = [
+                            "offerToken": "",
+                            "basePlanId": "",
+                            "offerId": "",
+                            "pricingPhases": [[
+                                "formattedPrice": product.displayPrice,
+                                "priceCurrencyCode": product.priceFormatStyle.locale.currency?.identifier ?? "",
+                                "priceAmountMicros": 0,
+                                "billingPeriod": formatSubscriptionPeriod(subscription.subscriptionPeriod),
+                                "billingCycleCount": 0,
+                                "recurrenceMode": 1
+                            ]]
+                        ]
+                        subscriptionOffers.append(regularOffer)
+                        
+                        productDict["subscriptionOfferDetails"] = subscriptionOffers
+                    }
+                } else {
+                    // One-time purchase
+                    productDict["priceAmountMicros"] = 0  // Not available in StoreKit 2
+                }
+                
+                productsArray.append(productDict)
+            }
+            
+            invoke.resolve(["products": productsArray])
+        } catch {
+            invoke.reject("Failed to fetch products: \(error.localizedDescription)")
+        }
+    }
+    
+    @objc public func purchase(_ invoke: Invoke) async throws {
+        let args = try invoke.parseArgs(PurchaseArgs.self)
+        
+        do {
+            let products = try await Product.products(for: [args.productId])
+            guard let product = products.first else {
+                invoke.reject("Product not found")
+                return
+            }
+            
+            // Initiate purchase
+            let result = try await product.purchase()
+            
+            switch result {
+            case .success(let verification):
+                switch verification {
+                case .verified(let transaction):
+                    // Finish the transaction
+                    await transaction.finish()
+                    
+                    let purchase = await createPurchaseObject(from: transaction, product: product)
+                    invoke.resolve(purchase)
+                    
+                case .unverified(_, _):
+                    invoke.reject("Transaction verification failed")
+                }
+                
+            case .userCancelled:
+                invoke.reject("Purchase cancelled by user")
+                
+            case .pending:
+                invoke.reject("Purchase is pending")
+                
+            @unknown default:
+                invoke.reject("Unknown purchase result")
+            }
+        } catch {
+            invoke.reject("Purchase failed: \(error.localizedDescription)")
+        }
+    }
+    
+    @objc public func restorePurchases(_ invoke: Invoke) async throws {
+        var purchases: [[String: Any]] = []
+        
+        do {
+            // Get all current entitlements
+            for await result in Transaction.currentEntitlements {
+                switch result {
+                case .verified(let transaction):
+                    if let product = try? await Product.products(for: [transaction.productID]).first {
+                        let purchase = await createPurchaseObject(from: transaction, product: product)
+                        purchases.append(purchase)
+                    }
+                case .unverified(_, _):
+                    // Skip unverified transactions
+                    continue
+                }
+            }
+            
+            invoke.resolve(["purchases": purchases])
+        } catch {
+            invoke.reject("Failed to restore purchases: \(error.localizedDescription)")
+        }
+    }
+    
+    @objc public func getPurchaseHistory(_ invoke: Invoke) async throws {
+        var history: [[String: Any]] = []
+        
+        do {
+            // Get all transactions (including expired ones)
+            for await result in Transaction.all {
+                switch result {
+                case .verified(let transaction):
+                    let record: [String: Any] = [
+                        "productId": transaction.productID,
+                        "purchaseTime": Int(transaction.purchaseDate.timeIntervalSince1970 * 1000),
+                        "purchaseToken": String(transaction.id),
+                        "quantity": transaction.purchasedQuantity,
+                        "originalJson": "",  // Not available in StoreKit 2
+                        "signature": ""      // Not available in StoreKit 2
+                    ]
+                    history.append(record)
+                case .unverified(_, _):
+                    continue
+                }
+            }
+            
+            invoke.resolve(["history": history])
+        } catch {
+            invoke.reject("Failed to get purchase history: \(error.localizedDescription)")
+        }
+    }
+    
+    @objc public func acknowledgePurchase(_ invoke: Invoke) throws {
+        // iOS automatically acknowledges purchases, so this is a no-op
+        invoke.resolve(["success": true])
+    }
+    
+    private func handleTransactionUpdate(_ result: VerificationResult<Transaction>) async {
+        switch result {
+        case .verified(let transaction):
+            // Get product details
+            if let product = try? await Product.products(for: [transaction.productID]).first {
+                let purchase = await createPurchaseObject(from: transaction, product: product)
+                
+                // Emit event
+                trigger("purchaseUpdated", data: purchase)
+            }
+            
+            // Always finish transactions
+            await transaction.finish()
+            
+        case .unverified(_, _):
+            // Handle unverified transaction
+            break
+        }
+    }
+    
+    private func createPurchaseObject(from transaction: Transaction, product: Product) async -> [String: Any] {
+        var isAutoRenewing = false
+        
+        // Check if it's an auto-renewable subscription
+        if product.type == .autoRenewable {
+            // Check subscription status
+            if let statuses = try? await product.subscription?.status {
+                for status in statuses {
+                    if status.state == .subscribed {
+                        isAutoRenewing = true
+                        break
+                    }
+                }
+            }
+        }
+        
+        return [
+            "orderId": String(transaction.id),
+            "packageName": Bundle.main.bundleIdentifier ?? "",
+            "productId": transaction.productID,
+            "purchaseTime": Int(transaction.purchaseDate.timeIntervalSince1970 * 1000),
+            "purchaseToken": String(transaction.id),
+            "purchaseState": transaction.revocationDate == nil ? 0 : 1,  // 0 = purchased, 1 = canceled
+            "isAutoRenewing": isAutoRenewing,
+            "isAcknowledged": true,  // Always true on iOS
+            "originalJson": "",      // Not available in StoreKit 2
+            "signature": ""          // Not available in StoreKit 2
+        ]
+    }
+    
+    private func formatSubscriptionPeriod(_ period: Product.SubscriptionPeriod) -> String {
+        switch period.unit {
+        case .day:
+            return "P\(period.value)D"
+        case .week:
+            return "P\(period.value)W"
+        case .month:
+            return "P\(period.value)M"
+        case .year:
+            return "P\(period.value)Y"
+        @unknown default:
+            return "P1M"
+        }
+    }
+}
+
+@_cdecl("init_plugin_iap")
+func initPlugin() -> Plugin {
+    if #available(iOS 15.0, *) {
+        return IapPlugin()
+    } else {
+        // Return a dummy plugin for older iOS versions
+        class DummyPlugin: Plugin {
+            @objc func initialize(_ invoke: Invoke) {
+                invoke.reject("IAP requires iOS 15.0 or later")
+            }
+            @objc func getProducts(_ invoke: Invoke) {
+                invoke.reject("IAP requires iOS 15.0 or later")
+            }
+            @objc func purchase(_ invoke: Invoke) {
+                invoke.reject("IAP requires iOS 15.0 or later")
+            }
+            @objc func restorePurchases(_ invoke: Invoke) {
+                invoke.reject("IAP requires iOS 15.0 or later")
+            }
+            @objc func getPurchaseHistory(_ invoke: Invoke) {
+                invoke.reject("IAP requires iOS 15.0 or later")
+            }
+            @objc func acknowledgePurchase(_ invoke: Invoke) {
+                invoke.reject("IAP requires iOS 15.0 or later")
+            }
+        }
+        return DummyPlugin()
+    }
+}
