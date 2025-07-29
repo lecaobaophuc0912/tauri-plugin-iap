@@ -2,6 +2,7 @@ package app.tauri.iap
 
 import android.app.Activity
 import android.util.Log
+import android.webkit.WebView
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
@@ -35,23 +36,26 @@ class RestorePurchasesArgs
 @InvokeArg
 class GetPurchaseHistoryArgs
 
+@InvokeArg
+class AcknowledgePurchaseArgs {
+    var purchaseToken: String? = null
+}
+
 @TauriPlugin
 class IapPlugin(private val activity: Activity): Plugin(activity), PurchasesUpdatedListener, BillingClientStateListener {
-    
     private lateinit var billingClient: BillingClient
     private val coroutineScope = CoroutineScope(Dispatchers.Main)
     private var pendingPurchaseInvoke: Invoke? = null
     private val TAG = "IapPlugin"
     
-    override fun load() {
-        super.load()
+    override fun load(webView: WebView) {
+        super.load(webView)
         initializeBillingClient()
     }
     
     private fun initializeBillingClient() {
         billingClient = BillingClient.newBuilder(activity)
             .setListener(this)
-            .enablePendingPurchases()
             .build()
     }
     
@@ -103,10 +107,10 @@ class IapPlugin(private val activity: Activity): Plugin(activity), PurchasesUpda
             .setProductList(productList)
             .build()
         
-        billingClient.queryProductDetailsAsync(params) { billingResult, productDetailsList ->
+        billingClient.queryProductDetailsAsync(params) { billingResult: BillingResult, productDetailsResult: QueryProductDetailsResult ->
             if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
                 val products = JSObject()
-                val productsArray = productDetailsList.map { productDetails ->
+                val productsArray = productDetailsResult.productDetailsList?.map { productDetails ->
                     JSObject().apply {
                         put("productId", productDetails.productId)
                         put("title", productDetails.title)
@@ -181,10 +185,10 @@ class IapPlugin(private val activity: Activity): Plugin(activity), PurchasesUpda
             .setProductList(productList)
             .build()
         
-        billingClient.queryProductDetailsAsync(params) { billingResult, productDetailsList ->
-            if (billingResult.responseCode == BillingClient.BillingResponseCode.OK && productDetailsList.isNotEmpty()) {
-                val productDetails = productDetailsList[0]
-                
+        billingClient.queryProductDetailsAsync(params) { billingResult: BillingResult, productDetailsResult: QueryProductDetailsResult ->
+            if (billingResult.responseCode == BillingClient.BillingResponseCode.OK && productDetailsResult.productDetailsList.isNotEmpty()) {
+                val productDetails = productDetailsResult.productDetailsList[0]
+
                 val productDetailsParamsList = if (args.offerToken != null) {
                     listOf(
                         BillingFlowParams.ProductDetailsParams.newBuilder()
@@ -256,40 +260,12 @@ class IapPlugin(private val activity: Activity): Plugin(activity), PurchasesUpda
     
     @Command
     fun getPurchaseHistory(invoke: Invoke) {
-        if (!billingClient.isReady) {
-            invoke.reject("Billing client not ready")
-            return
-        }
-        
-        val params = QueryPurchaseHistoryParams.newBuilder()
-            .setProductType(BillingClient.ProductType.SUBS)
-            .build()
-        
-        billingClient.queryPurchaseHistoryAsync(params) { billingResult, purchaseHistoryList ->
-            if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
-                val historyArray = purchaseHistoryList?.map { record ->
-                    JSObject().apply {
-                        put("productId", record.products.firstOrNull() ?: "")
-                        put("purchaseTime", record.purchaseTime)
-                        put("purchaseToken", record.purchaseToken)
-                        put("quantity", record.quantity)
-                        put("originalJson", record.originalJson)
-                        put("signature", record.signature)
-                    }
-                } ?: emptyList()
-                
-                val result = JSObject()
-                result.put("history", historyArray)
-                invoke.resolve(result)
-            } else {
-                invoke.reject("Failed to get purchase history: ${billingResult.debugMessage}")
-            }
-        }
+        invoke.reject("Purchase history is not supported")
     }
     
     @Command
     fun acknowledgePurchase(invoke: Invoke) {
-        val purchaseToken = invoke.getString("purchaseToken")
+        val purchaseToken = invoke.parseArgs(AcknowledgePurchaseArgs::class.java).purchaseToken
         
         if (purchaseToken == null) {
             invoke.reject("Purchase token is required")
