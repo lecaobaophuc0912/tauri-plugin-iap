@@ -35,7 +35,14 @@ impl<R: Runtime, T: Manager<R>> crate::IapExt<R> for T {
 /// Initializes the plugin.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
   Builder::new("iap")
-    .invoke_handler(tauri::generate_handler![commands::ping])
+    .invoke_handler(tauri::generate_handler![
+      commands::initialize,
+      commands::get_products,
+      commands::purchase,
+      commands::restore_purchases,
+      commands::get_purchase_history,
+      commands::acknowledge_purchase,
+    ])
     .setup(|app, api| {
       #[cfg(mobile)]
       let iap = mobile::init(app, api)?;

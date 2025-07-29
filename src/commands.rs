@@ -1,13 +1,49 @@
 use tauri::{AppHandle, command, Runtime};
 
 use crate::models::*;
-use crate::Result;
-use crate::IapExt;
+use crate::{IapExt, Result};
 
 #[command]
-pub(crate) async fn ping<R: Runtime>(
+pub(crate) async fn initialize<R: Runtime>(
     app: AppHandle<R>,
-    payload: PingRequest,
-) -> Result<PingResponse> {
-    app.iap().ping(payload)
+) -> Result<InitializeResponse> {
+    app.iap().initialize()
+}
+
+#[command]
+pub(crate) async fn get_products<R: Runtime>(
+    app: AppHandle<R>,
+    payload: GetProductsRequest,
+) -> Result<GetProductsResponse> {
+    app.iap().get_products(payload.product_ids, payload.product_type)
+}
+
+#[command]
+pub(crate) async fn purchase<R: Runtime>(
+    app: AppHandle<R>,
+    payload: PurchaseRequest,
+) -> Result<Purchase> {
+    app.iap().purchase(payload.product_id, payload.offer_token)
+}
+
+#[command]
+pub(crate) async fn restore_purchases<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<RestorePurchasesResponse> {
+    app.iap().restore_purchases()
+}
+
+#[command]
+pub(crate) async fn get_purchase_history<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<GetPurchaseHistoryResponse> {
+    app.iap().get_purchase_history()
+}
+
+#[command]
+pub(crate) async fn acknowledge_purchase<R: Runtime>(
+    app: AppHandle<R>,
+    payload: AcknowledgePurchaseRequest,
+) -> Result<AcknowledgePurchaseResponse> {
+    app.iap().acknowledge_purchase(payload.purchase_token)
 }
