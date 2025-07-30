@@ -54,8 +54,14 @@ class IapPlugin(private val activity: Activity): Plugin(activity), PurchasesUpda
     }
     
     private fun initializeBillingClient() {
+        var params = PendingPurchasesParams.newBuilder()
+            .enableOneTimeProducts()
+            .build();
+
         billingClient = BillingClient.newBuilder(activity)
             .setListener(this)
+            .enablePendingPurchases(params)
+            .enableAutoServiceReconnection()
             .build()
     }
     
