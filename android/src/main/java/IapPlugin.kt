@@ -14,6 +14,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 
 @InvokeArg
 class InitializeArgs
@@ -82,7 +83,7 @@ class IapPlugin(private val activity: Activity): Plugin(activity), PurchasesUpda
             }
 
             override fun onBillingServiceDisconnected() {
-                // Try to restart the connection on the next request
+                Log.d(TAG, "Billing service disconnected")
             }
         })
     }
@@ -144,10 +145,10 @@ class IapPlugin(private val activity: Activity): Plugin(activity), PurchasesUpda
                                                 put("recurrenceMode", phase.recurrenceMode)
                                             }
                                         }
-                                        put("pricingPhases", pricingPhases)
+                                        put("pricingPhases", JSONArray(pricingPhases))
                                     }
                                 }
-                                put("subscriptionOfferDetails", offers)
+                                put("subscriptionOfferDetails", JSONArray(offers))
                             }
                         } else {
                             // For one-time products
@@ -160,7 +161,7 @@ class IapPlugin(private val activity: Activity): Plugin(activity), PurchasesUpda
                         }
                     }
                 }
-                products.put("products", productsArray)
+                products.put("products", JSONArray(productsArray))
                 invoke.resolve(products)
             } else {
                 invoke.reject("Failed to fetch products: ${billingResult.debugMessage}")
