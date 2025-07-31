@@ -28,9 +28,9 @@ class AcknowledgePurchaseArgs: Decodable {
 class IapPlugin: Plugin {
     private var updateListenerTask: Task<Void, Error>?
     
-    override func onWebviewCreated() {
-        super.onWebviewCreated()
-        
+    public override func load(webview: WKWebView) {
+        super.load(webview: webview)
+
         // Start listening for transaction updates
         updateListenerTask = Task {
             for await update in Transaction.updates {
@@ -65,7 +65,7 @@ class IapPlugin: Plugin {
                 
                 // Add pricing information
                 productDict["formattedPrice"] = product.displayPrice
-                productDict["priceCurrencyCode"] = product.priceFormatStyle.locale.currency?.identifier ?? ""
+                productDict["priceCurrencyCode"] = getCurrencyCode(for: product)
                 
                 // Handle subscription-specific information
                 if product.type == .autoRenewable || product.type == .nonRenewable {
@@ -80,7 +80,7 @@ class IapPlugin: Plugin {
                                 "offerId": introOffer.id ?? "",
                                 "pricingPhases": [[
                                     "formattedPrice": introOffer.displayPrice,
-                                    "priceCurrencyCode": product.priceFormatStyle.locale.currency?.identifier ?? "",
+                                    "priceCurrencyCode": getCurrencyCode(for: product),
                                     "priceAmountMicros": 0,  // Not available in StoreKit 2
                                     "billingPeriod": formatSubscriptionPeriod(introOffer.period),
                                     "billingCycleCount": introOffer.periodCount,
@@ -97,7 +97,7 @@ class IapPlugin: Plugin {
                             "offerId": "",
                             "pricingPhases": [[
                                 "formattedPrice": product.displayPrice,
-                                "priceCurrencyCode": product.priceFormatStyle.locale.currency?.identifier ?? "",
+                                "priceCurrencyCode": getCurrencyCode(for: product),
                                 "priceAmountMicros": 0,
                                 "billingPeriod": formatSubscriptionPeriod(subscription.subscriptionPeriod),
                                 "billingCycleCount": 0,
@@ -227,8 +227,8 @@ class IapPlugin: Plugin {
             if let product = try? await Product.products(for: [transaction.productID]).first {
                 let purchase = await createPurchaseObject(from: transaction, product: product)
                 
-                // Emit event
-                trigger("purchaseUpdated", data: purchase)
+                // Emit event - convert to JSObject-compatible format
+                trigger("purchaseUpdated", data: purchase as! JSObject)
             }
             
             // Always finish transactions
@@ -282,6 +282,15 @@ class IapPlugin: Plugin {
             return "P\(period.value)Y"
         @unknown default:
             return "P1M"
+        }
+    }
+    
+    private func getCurrencyCode(for product: Product) -> String {
+        if #available(iOS 16.0, *) {
+            return product.priceFormatStyle.locale.currency?.identifier ?? ""
+        } else {
+            // Fallback for iOS 15: currency code not directly available
+            return ""
         }
     }
 }
