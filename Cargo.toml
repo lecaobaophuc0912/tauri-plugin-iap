@@ -15,3 +15,6 @@ thiserror = "2"
 
 [build-dependencies]
 tauri-plugin = { version = "2.3.0", features = ["build"] }
+
+[target.'cfg(target_os = "macos")'.build-dependencies]
+swift-rs = { version = "1.0.7", features = ["build"] }
