@@ -1,3 +1,6 @@
+# WARNING: WORK IS STILL IN PROGRESS. NOT READY FOR PRODUCTION YET
+
+
 # Tauri Plugin IAP
 
 A Tauri plugin for In-App Purchases (IAP) with support for subscriptions on both iOS (StoreKit 2) and Android (Google Play Billing).
