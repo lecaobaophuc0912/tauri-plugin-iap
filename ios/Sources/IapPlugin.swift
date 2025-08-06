@@ -1,5 +1,5 @@
 import SwiftRs
-import Tauri
+import TauriSwiftRuntime
 import UIKit
 import WebKit
 import StoreKit

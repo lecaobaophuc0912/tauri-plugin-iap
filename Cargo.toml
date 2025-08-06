@@ -13,6 +13,8 @@ tauri = { version = "2.7.0" }
 serde = "1.0"
 thiserror = "2"
 
+tauri-swift-runtime = { git = "https://github.com/Choochmeque/tauri-swift-runtime.git", tag = "0.1.0"}
+
 [build-dependencies]
 tauri-plugin = { version = "2.3.0", features = ["build"] }
 

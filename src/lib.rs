@@ -5,10 +5,12 @@ use tauri::{
 
 pub use models::*;
 
-#[cfg(desktop)]
+#[cfg(target_os = "android")]
+mod android;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+mod apple;
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 mod desktop;
-#[cfg(mobile)]
-mod mobile;
 
 mod commands;
 mod error;
@@ -16,10 +18,12 @@ mod models;
 
 pub use error::{Error, Result};
 
-#[cfg(desktop)]
+#[cfg(target_os = "android")]
+use android::Iap;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+use apple::Iap;
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 use desktop::Iap;
-#[cfg(mobile)]
-use mobile::Iap;
 
 /// Extensions to [`tauri::App`], [`tauri::AppHandle`] and [`tauri::Window`] to access the iap APIs.
 pub trait IapExt<R: Runtime> {
@@ -44,11 +48,13 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
       commands::acknowledge_purchase,
     ])
     .setup(|app, api| {
-      #[cfg(mobile)]
-      let iap = mobile::init(app, api)?;
-      #[cfg(desktop)]
-      let iap = desktop::init(app, api)?;
+      #[cfg(target_os = "android")]
+      let iap = android::init(app, api)?;
+      #[cfg(any(target_os = "macos", target_os = "ios"))]
+      let iap = apple::init(app, api)?;
       app.manage(iap);
+      #[cfg(any(target_os = "windows", target_os = "linux"))]
+      let iap = desktop::init(app, api)?;
       Ok(())
     })
     .build()
