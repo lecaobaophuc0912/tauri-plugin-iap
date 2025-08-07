@@ -52,9 +52,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
       let iap = android::init(app, api)?;
       #[cfg(any(target_os = "macos", target_os = "ios"))]
       let iap = apple::init(app, api)?;
-      app.manage(iap);
       #[cfg(any(target_os = "windows", target_os = "linux"))]
       let iap = desktop::init(app, api)?;
+      app.manage(iap);
       Ok(())
     })
     .build()
