@@ -33,18 +33,9 @@ jobs:
       # pnpm
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
           run_install: true
 
-      # Optional: cache pnpm store for install speed
-      - name: Cache pnpm store
-        uses: actions/cache@v4
-        with:
-          path: ~/.pnpm-store
-          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: pnpm-${{ runner.os }}-
-
-      # (Optional) ensure the tag matches package.json version
+      # Ensure the tag matches package.json version
       - name: Verify version matches tag
         run: |
           PKG_VERSION=$(node -p "require('./package.json').version")
@@ -74,7 +65,7 @@ jobs:
       # Toolchain
       - uses: dtolnay/rust-toolchain@stable
 
-      # (Optional) verify Cargo.toml version matches the tag
+      # Verify Cargo.toml version matches the tag
       - name: Verify crate version matches tag
         shell: bash
         run: |
