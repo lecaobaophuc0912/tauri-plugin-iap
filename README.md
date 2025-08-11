@@ -30,7 +30,7 @@ Add the plugin to your Tauri project:
 
 ```toml
 [dependencies]
-tauri-plugin-iap = { path = "../path-to-plugin" }
+tauri-plugin-iap = "0.1"
 ```
 
 Register the plugin in your Tauri app:
