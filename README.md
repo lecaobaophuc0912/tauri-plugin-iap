@@ -1,6 +1,6 @@
 # ⚠️ WARNING: WORK IS STILL IN PROGRESS. NOT READY FOR PRODUCTION YET
 
-[![npm version](https://badge.fury.io/js/@choochmeque%2Ftauri-plugin-iap-api.svg)](https://badge.fury.io/js/@choochmeque%2Ftauri-plugin-iap-api)
+![NPM Version](https://img.shields.io/npm/v/@choochmeque%2Ftauri-plugin-iap-api)
 ![Crates.io Version](https://img.shields.io/crates/v/tauri-plugin-iap)
 
 
