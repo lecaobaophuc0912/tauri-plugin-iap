@@ -22,11 +22,11 @@ impl<R: Runtime> Iap<R> {
     Err(crate::Error::from(std::io::Error::new(std::io::ErrorKind::Other, "IAP is not supported on this platform")))
   }
 
-  pub fn purchase(&self, _product_id: String, _offer_token: Option<String>) -> crate::Result<Purchase> {
+  pub fn purchase(&self, _product_id: String, _product_type: String, _offer_token: Option<String>) -> crate::Result<Purchase> {
     Err(crate::Error::from(std::io::Error::new(std::io::ErrorKind::Other, "IAP is not supported on this platform")))
   }
 
-  pub fn restore_purchases(&self) -> crate::Result<RestorePurchasesResponse> {
+  pub fn restore_purchases(&self, _product_type: String) -> crate::Result<RestorePurchasesResponse> {
     Err(crate::Error::from(std::io::Error::new(std::io::ErrorKind::Other, "IAP is not supported on this platform")))
   }
 

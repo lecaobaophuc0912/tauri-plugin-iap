@@ -35,17 +35,17 @@ impl<R: Runtime> Iap<R> {
       .map_err(Into::into)
   }
 
-  pub fn purchase(&self, product_id: String, offer_token: Option<String>) -> crate::Result<Purchase> {
+  pub fn purchase(&self, product_id: String, product_type: String, offer_token: Option<String>) -> crate::Result<Purchase> {
     self
       .0
-      .run_mobile_plugin("purchase", PurchaseRequest { product_id, offer_token })
+      .run_mobile_plugin("purchase", PurchaseRequest { product_id, product_type, offer_token })
       .map_err(Into::into)
   }
 
-  pub fn restore_purchases(&self) -> crate::Result<RestorePurchasesResponse> {
+  pub fn restore_purchases(&self, product_type: String) -> crate::Result<RestorePurchasesResponse> {
     self
       .0
-      .run_mobile_plugin("restorePurchases", ())
+      .run_mobile_plugin("restorePurchases", RestorePurchasesRequest { product_type })
       .map_err(Into::into)
   }
 

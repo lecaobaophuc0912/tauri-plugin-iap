@@ -23,14 +23,15 @@ pub(crate) async fn purchase<R: Runtime>(
     app: AppHandle<R>,
     payload: PurchaseRequest,
 ) -> Result<Purchase> {
-    app.iap().purchase(payload.product_id, payload.offer_token)
+    app.iap().purchase(payload.product_id, payload.product_type, payload.offer_token)
 }
 
 #[command]
 pub(crate) async fn restore_purchases<R: Runtime>(
     app: AppHandle<R>,
+    payload: RestorePurchasesRequest,
 ) -> Result<RestorePurchasesResponse> {
-    app.iap().restore_purchases()
+    app.iap().restore_purchases(payload.product_type)
 }
 
 #[command]

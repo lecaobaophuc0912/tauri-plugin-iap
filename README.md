@@ -64,13 +64,13 @@ await initialize();
 // Get available products
 const products = await getProducts(['subscription_id_1', 'subscription_id_2'], 'subs');
 
-// Purchase a subscription
+// Purchase a subscription or in-app product
 // On Android: use the offer token from subscriptionOfferDetails
 // On iOS: offer token is not used
-const purchaseResult = await purchase('subscription_id_1', offerToken);
+const purchaseResult = await purchase('subscription_id_1', 'subs', offerToken);
 
-// Restore purchases
-const restored = await restorePurchases();
+// Restore purchases (specify product type)
+const restored = await restorePurchases('subs');
 
 // Acknowledge a purchase (Android only, iOS auto-acknowledges)
 await acknowledgePurchase(purchaseResult.purchaseToken);
@@ -121,17 +121,21 @@ Fetches product details from the store.
   - `formattedPrice`: Localized price string
   - `subscriptionOfferDetails`: (subscriptions only) Array of offers
 
-### `purchase(productId: string, offerToken?: string)`
+### `purchase(productId: string, productType: 'subs' | 'inapp' = 'subs', offerToken?: string)`
 Initiates a purchase flow.
 
 **Parameters:**
 - `productId`: The product to purchase
+- `productType`: Type of product ('subs' for subscriptions, 'inapp' for one-time purchases), defaults to 'subs'
 - `offerToken`: (Android only) The offer token for subscriptions
 
 **Returns:** Purchase object with transaction details
 
-### `restorePurchases()`
+### `restorePurchases(productType: 'subs' | 'inapp' = 'subs')`
 Queries and returns all active purchases.
+
+**Parameters:**
+- `productType`: Type of products to restore ('subs' or 'inapp'), defaults to 'subs'
 
 ### `getPurchaseHistory()`
 Returns the complete purchase history.

@@ -69,6 +69,8 @@ pub struct GetProductsResponse {
 #[serde(rename_all = "camelCase")]
 pub struct PurchaseRequest {
     pub product_id: String,
+    #[serde(default = "default_product_type")]
+    pub product_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub offer_token: Option<String>,
 }
@@ -86,6 +88,13 @@ pub struct Purchase {
     pub is_acknowledged: bool,
     pub original_json: String,
     pub signature: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestorePurchasesRequest {
+    #[serde(default = "default_product_type")]
+    pub product_type: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
