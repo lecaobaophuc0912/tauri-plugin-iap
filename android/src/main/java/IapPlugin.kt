@@ -28,11 +28,14 @@ class GetProductsArgs {
 @InvokeArg
 class PurchaseArgs {
     var productId: String = ""
+    var productType: String = "subs" // "subs" or "inapp"
     var offerToken: String? = null
 }
 
 @InvokeArg
-class RestorePurchasesArgs
+class RestorePurchasesArgs {
+    var productType: String = "subs" // "subs" or "inapp"
+}
 
 @InvokeArg
 class GetPurchaseHistoryArgs
@@ -180,11 +183,17 @@ class IapPlugin(private val activity: Activity): Plugin(activity), PurchasesUpda
         
         pendingPurchaseInvoke = invoke
         
+        val productType = when (args.productType) {
+            "inapp" -> BillingClient.ProductType.INAPP
+            "subs" -> BillingClient.ProductType.SUBS
+            else -> BillingClient.ProductType.SUBS
+        }
+        
         // First, get the product details
         val productList = listOf(
             QueryProductDetailsParams.Product.newBuilder()
                 .setProductId(args.productId)
-                .setProductType(BillingClient.ProductType.SUBS)
+                .setProductType(productType)
                 .build()
         )
         
@@ -230,13 +239,21 @@ class IapPlugin(private val activity: Activity): Plugin(activity), PurchasesUpda
     
     @Command
     fun restorePurchases(invoke: Invoke) {
+        val args = invoke.parseArgs(RestorePurchasesArgs::class.java)
+        
         if (!billingClient.isReady) {
             invoke.reject("Billing client not ready")
             return
         }
         
+        val productType = when (args.productType) {
+            "inapp" -> BillingClient.ProductType.INAPP
+            "subs" -> BillingClient.ProductType.SUBS
+            else -> BillingClient.ProductType.SUBS
+        }
+        
         val params = QueryPurchasesParams.newBuilder()
-            .setProductType(BillingClient.ProductType.SUBS)
+            .setProductType(productType)
             .build()
         
         billingClient.queryPurchasesAsync(params) { billingResult, purchases ->

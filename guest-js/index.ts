@@ -88,18 +88,26 @@ export async function getProducts(
 
 export async function purchase(
   productId: string,
+  productType: 'subs' | 'inapp' = 'subs',
   offerToken?: string
 ): Promise<Purchase> {
   return await invoke<Purchase>('plugin:iap|purchase', {
     payload: {
       productId,
+      productType,
       offerToken,
     },
   })
 }
 
-export async function restorePurchases(): Promise<RestorePurchasesResponse> {
-  return await invoke<RestorePurchasesResponse>('plugin:iap|restore_purchases')
+export async function restorePurchases(
+  productType: 'subs' | 'inapp' = 'subs'
+): Promise<RestorePurchasesResponse> {
+  return await invoke<RestorePurchasesResponse>('plugin:iap|restore_purchases', {
+    payload: {
+      productType,
+    },
+  })
 }
 
 export async function getPurchaseHistory(): Promise<GetPurchaseHistoryResponse> {

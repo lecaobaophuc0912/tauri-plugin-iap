@@ -13,10 +13,13 @@ class GetProductsArgs: Decodable {
 
 class PurchaseArgs: Decodable {
     let productId: String
+    let productType: String?
     let offerToken: String?
 }
 
-class RestorePurchasesArgs: Decodable {}
+class RestorePurchasesArgs: Decodable {
+    let productType: String?
+}
 
 class GetPurchaseHistoryArgs: Decodable {}
 
@@ -164,6 +167,7 @@ class IapPlugin: Plugin {
     }
     
     @objc public func restorePurchases(_ invoke: Invoke) async throws {
+        let args = try? invoke.parseArgs(RestorePurchasesArgs.self)
         var purchases: [[String: Any]] = []
         
         do {
@@ -172,8 +176,27 @@ class IapPlugin: Plugin {
                 switch result {
                 case .verified(let transaction):
                     if let product = try? await Product.products(for: [transaction.productID]).first {
-                        let purchase = await createPurchaseObject(from: transaction, product: product)
-                        purchases.append(purchase)
+                        // Filter by product type if specified
+                        if let requestedType = args?.productType {
+                            let productTypeMatches: Bool
+                            switch requestedType {
+                            case "subs":
+                                productTypeMatches = (product.type == .autoRenewable || product.type == .nonRenewable)
+                            case "inapp":
+                                productTypeMatches = (product.type == .consumable || product.type == .nonConsumable)
+                            default:
+                                productTypeMatches = true
+                            }
+                            
+                            if productTypeMatches {
+                                let purchase = await createPurchaseObject(from: transaction, product: product)
+                                purchases.append(purchase)
+                            }
+                        } else {
+                            // No filter, include all
+                            let purchase = await createPurchaseObject(from: transaction, product: product)
+                            purchases.append(purchase)
+                        }
                     }
                 case .unverified(_, _):
                     // Skip unverified transactions
