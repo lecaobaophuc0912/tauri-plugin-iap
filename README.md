@@ -26,7 +26,17 @@ A Tauri plugin for In-App Purchases (IAP) with support for subscriptions on both
 
 ## Installation
 
-Add the plugin to your Tauri project:
+Install the JavaScript package:
+
+```bash
+npm install @choochmeque/tauri-plugin-iap-api
+# or
+yarn add @choochmeque/tauri-plugin-iap-api
+# or
+pnpm add @choochmeque/tauri-plugin-iap-api
+```
+
+Add the plugin to your Tauri project's `Cargo.toml`:
 
 ```toml
 [dependencies]
