@@ -43,6 +43,16 @@ Add the plugin to your Tauri project's `Cargo.toml`:
 tauri-plugin-iap = "0.1"
 ```
 
+Configure the plugin permissions in your `capabilities/default.json`:
+
+```json
+{
+  "permissions": [
+    "iap:default"
+  ]
+}
+```
+
 Register the plugin in your Tauri app:
 
 ```rust
