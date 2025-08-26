@@ -274,7 +274,7 @@ class IapPlugin(private val activity: Activity): Plugin(activity), PurchasesUpda
                 }
                 
                 val result = JSObject()
-                result.put("purchases", purchasesArray)
+                result.put("purchases", JSONArray(purchasesArray))
                 invoke.resolve(result)
             } else {
                 invoke.reject("Failed to restore purchases: ${billingResult.debugMessage}")
