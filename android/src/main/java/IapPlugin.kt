@@ -45,12 +45,24 @@ class AcknowledgePurchaseArgs {
     var purchaseToken: String? = null
 }
 
+@InvokeArg
+class GetProductStatusArgs {
+    var productId: String = ""
+    var productType: String = "subs" // "subs" or "inapp"
+}
+
 @TauriPlugin
 class IapPlugin(private val activity: Activity): Plugin(activity), PurchasesUpdatedListener, BillingClientStateListener {
     private lateinit var billingClient: BillingClient
     private val coroutineScope = CoroutineScope(Dispatchers.Main)
     private var pendingPurchaseInvoke: Invoke? = null
     private val TAG = "IapPlugin"
+    
+    companion object {
+        const val PURCHASE_STATE_PURCHASED = 0
+        const val PURCHASE_STATE_CANCELED = 1
+        const val PURCHASE_STATE_PENDING = 2
+    }
     
     override fun load(webView: WebView) {
         super.load(webView)
@@ -310,6 +322,60 @@ class IapPlugin(private val activity: Activity): Plugin(activity), PurchasesUpda
                 invoke.resolve(JSObject().put("success", true))
             } else {
                 invoke.reject("Failed to acknowledge purchase: ${billingResult.debugMessage}")
+            }
+        }
+    }
+    
+    @Command
+    fun getProductStatus(invoke: Invoke) {
+        val args = invoke.parseArgs(GetProductStatusArgs::class.java)
+        
+        if (!billingClient.isReady) {
+            invoke.reject("Billing client not ready")
+            return
+        }
+        
+        val productType = when (args.productType) {
+            "inapp" -> BillingClient.ProductType.INAPP
+            "subs" -> BillingClient.ProductType.SUBS
+            else -> BillingClient.ProductType.SUBS
+        }
+        
+        val params = QueryPurchasesParams.newBuilder()
+            .setProductType(productType)
+            .build()
+        
+        billingClient.queryPurchasesAsync(params) { billingResult, purchases ->
+            if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
+                val productPurchase = purchases.find { purchase ->
+                    purchase.products.contains(args.productId)
+                }
+                
+                val statusResult = JSObject().apply {
+                    put("productId", args.productId)
+                    
+                    if (productPurchase != null) {
+                        put("isOwned", true)
+                        put("purchaseState", when(productPurchase.purchaseState) {
+                            Purchase.PurchaseState.PURCHASED -> PURCHASE_STATE_PURCHASED
+                            Purchase.PurchaseState.PENDING -> PURCHASE_STATE_PENDING
+                            else -> PURCHASE_STATE_CANCELED
+                        })
+                        put("purchaseTime", productPurchase.purchaseTime)
+                        put("isAutoRenewing", productPurchase.isAutoRenewing)
+                        put("isAcknowledged", productPurchase.isAcknowledged)
+                        put("purchaseToken", productPurchase.purchaseToken)
+                        
+                        // Note: Android doesn't provide expiration time directly for subscriptions
+                        // It would require additional Google Play Developer API calls
+                    } else {
+                        put("isOwned", false)
+                    }
+                }
+                
+                invoke.resolve(statusResult)
+            } else {
+                invoke.reject("Failed to get product status: ${billingResult.debugMessage}")
             }
         }
     }

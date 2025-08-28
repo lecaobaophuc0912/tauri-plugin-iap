@@ -70,6 +70,23 @@ export interface AcknowledgePurchaseResponse {
   success: boolean
 }
 
+export enum PurchaseState {
+  PURCHASED = 0,
+  CANCELED = 1,
+  PENDING = 2,
+}
+
+export interface ProductStatus {
+  productId: string
+  isOwned: boolean
+  purchaseState?: PurchaseState
+  purchaseTime?: number
+  expirationTime?: number
+  isAutoRenewing?: boolean
+  isAcknowledged?: boolean
+  purchaseToken?: string
+}
+
 export async function initialize(): Promise<InitializeResponse> {
   return await invoke<InitializeResponse>('plugin:iap|initialize')
 }
@@ -120,6 +137,18 @@ export async function acknowledgePurchase(
   return await invoke<AcknowledgePurchaseResponse>('plugin:iap|acknowledge_purchase', {
     payload: {
       purchaseToken,
+    },
+  })
+}
+
+export async function getProductStatus(
+  productId: string,
+  productType: 'subs' | 'inapp' = 'subs'
+): Promise<ProductStatus> {
+  return await invoke<ProductStatus>('plugin:iap|get_product_status', {
+    payload: {
+      productId,
+      productType,
     },
   })
 }

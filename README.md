@@ -15,6 +15,7 @@ A Tauri plugin for In-App Purchases (IAP) with support for subscriptions on both
 - Purchase subscriptions with platform-specific features
 - Restore previous purchases
 - Get purchase history
+- Check product ownership and subscription status
 - Real-time purchase state updates via events
 - Automatic transaction verification (iOS)
 - Support for introductory offers and free trials
@@ -75,7 +76,9 @@ import {
   purchase,
   restorePurchases,
   acknowledgePurchase,
-  onPurchaseUpdated
+  getProductStatus,
+  onPurchaseUpdated,
+  PurchaseState
 } from 'tauri-plugin-iap-api';
 
 // Initialize the billing client
@@ -83,6 +86,15 @@ await initialize();
 
 // Get available products
 const products = await getProducts(['subscription_id_1', 'subscription_id_2'], 'subs');
+
+// Check if user owns a specific product
+const status = await getProductStatus('subscription_id_1', 'subs');
+if (status.isOwned && status.purchaseState === PurchaseState.PURCHASED) {
+  console.log('User has active subscription');
+  if (status.isAutoRenewing) {
+    console.log('Subscription will auto-renew');
+  }
+}
 
 // Purchase a subscription or in-app product
 // On Android: use the offer token from subscriptionOfferDetails
@@ -162,6 +174,23 @@ Returns the complete purchase history.
 
 ### `acknowledgePurchase(purchaseToken: string)`
 Acknowledges a purchase (required on Android within 3 days, no-op on iOS).
+
+### `getProductStatus(productId: string, productType: 'subs' | 'inapp' = 'subs')`
+Checks the ownership and subscription status of a specific product.
+
+**Parameters:**
+- `productId`: The product identifier to check
+- `productType`: Type of product ('subs' or 'inapp'), defaults to 'subs'
+
+**Returns:** ProductStatus object with:
+- `productId`: Product identifier
+- `isOwned`: Whether the user currently owns the product
+- `purchaseState`: Current state (PURCHASED=0, CANCELED=1, PENDING=2)
+- `purchaseTime`: When the product was purchased (timestamp)
+- `expirationTime`: (subscriptions only) When the subscription expires
+- `isAutoRenewing`: (subscriptions only) Whether auto-renewal is enabled
+- `isAcknowledged`: Whether the purchase has been acknowledged
+- `purchaseToken`: Token for the purchase transaction
 
 ### `onPurchaseUpdated(callback: (purchase: Purchase) => void)`
 Listens for purchase state changes.

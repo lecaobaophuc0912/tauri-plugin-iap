@@ -131,3 +131,61 @@ pub struct AcknowledgePurchaseRequest {
 pub struct AcknowledgePurchaseResponse {
     pub success: bool,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PurchaseStateValue {
+    Purchased = 0,
+    Canceled = 1,
+    Pending = 2,
+}
+
+impl Serialize for PurchaseStateValue {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_i32(*self as i32)
+    }
+}
+
+impl<'de> Deserialize<'de> for PurchaseStateValue {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = i32::deserialize(deserializer)?;
+        match value {
+            0 => Ok(PurchaseStateValue::Purchased),
+            1 => Ok(PurchaseStateValue::Canceled),
+            2 => Ok(PurchaseStateValue::Pending),
+            _ => Err(serde::de::Error::custom(format!("Invalid purchase state: {}", value))),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetProductStatusRequest {
+    pub product_id: String,
+    #[serde(default = "default_product_type")]
+    pub product_type: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProductStatus {
+    pub product_id: String,
+    pub is_owned: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub purchase_state: Option<PurchaseStateValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub purchase_time: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expiration_time: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_auto_renewing: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_acknowledged: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub purchase_token: Option<String>,
+}

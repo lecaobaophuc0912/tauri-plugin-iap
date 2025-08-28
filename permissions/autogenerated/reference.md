@@ -49,6 +49,32 @@ Denies the acknowledge_purchase command without any pre-configured scope.
 <tr>
 <td>
 
+`iap:allow-get-product-status`
+
+</td>
+<td>
+
+Enables the get_product_status command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`iap:deny-get-product-status`
+
+</td>
+<td>
+
+Denies the get_product_status command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `iap:allow-get-products`
 
 </td>

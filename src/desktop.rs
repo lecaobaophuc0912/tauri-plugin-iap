@@ -37,4 +37,8 @@ impl<R: Runtime> Iap<R> {
   pub fn acknowledge_purchase(&self, _purchase_token: String) -> crate::Result<AcknowledgePurchaseResponse> {
     Err(crate::Error::from(std::io::Error::new(std::io::ErrorKind::Other, "IAP is not supported on this platform")))
   }
+
+  pub fn get_product_status(&self, _product_id: String, _product_type: String) -> crate::Result<ProductStatus> {
+    Err(crate::Error::from(std::io::Error::new(std::io::ErrorKind::Other, "IAP is not supported on this platform")))
+  }
 }

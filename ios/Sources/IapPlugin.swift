@@ -27,6 +27,17 @@ class AcknowledgePurchaseArgs: Decodable {
     let purchaseToken: String
 }
 
+class GetProductStatusArgs: Decodable {
+    let productId: String
+    let productType: String?
+}
+
+enum PurchaseStateValue: Int {
+    case purchased = 0
+    case canceled = 1
+    case pending = 2
+}
+
 @available(iOS 15.0, *)
 class IapPlugin: Plugin {
     private var updateListenerTask: Task<Void, Error>?
@@ -243,6 +254,76 @@ class IapPlugin: Plugin {
         invoke.resolve(["success": true])
     }
     
+    @objc public func getProductStatus(_ invoke: Invoke) async throws {
+        let args = try invoke.parseArgs(GetProductStatusArgs.self)
+        
+        var statusResult: [String: Any] = [
+            "productId": args.productId,
+            "isOwned": false
+        ]
+        
+        // Check current entitlements for the specific product
+        for await result in Transaction.currentEntitlements {
+            switch result {
+            case .verified(let transaction):
+                if transaction.productID == args.productId {
+                    statusResult["isOwned"] = true
+                    statusResult["purchaseTime"] = Int(transaction.purchaseDate.timeIntervalSince1970 * 1000)
+                    statusResult["purchaseToken"] = String(transaction.id)
+                    statusResult["isAcknowledged"] = true  // Always true on iOS
+                    
+                    // Check if expired/revoked
+                    if let revocationDate = transaction.revocationDate {
+                        statusResult["purchaseState"] = PurchaseStateValue.canceled.rawValue
+                        statusResult["isOwned"] = false
+                        statusResult["expirationTime"] = Int(revocationDate.timeIntervalSince1970 * 1000)
+                    } else if let expirationDate = transaction.expirationDate {
+                        if expirationDate < Date() {
+                            statusResult["purchaseState"] = PurchaseStateValue.canceled.rawValue
+                            statusResult["isOwned"] = false
+                        } else {
+                            statusResult["purchaseState"] = PurchaseStateValue.purchased.rawValue
+                        }
+                        statusResult["expirationTime"] = Int(expirationDate.timeIntervalSince1970 * 1000)
+                    } else {
+                        statusResult["purchaseState"] = PurchaseStateValue.purchased.rawValue
+                    }
+                    
+                    // Check subscription renewal status if it's a subscription
+                    if let product = try? await Product.products(for: [args.productId]).first {
+                        if product.type == .autoRenewable {
+                            // Check subscription status
+                            if let statuses = try? await product.subscription?.status {
+                                for status in statuses {
+                                    if status.state == .subscribed {
+                                        statusResult["isAutoRenewing"] = true
+                                    } else if status.state == .expired {
+                                        statusResult["isAutoRenewing"] = false
+                                        statusResult["purchaseState"] = PurchaseStateValue.canceled.rawValue
+                                        statusResult["isOwned"] = false
+                                    } else if status.state == .inGracePeriod {
+                                        statusResult["isAutoRenewing"] = true
+                                        statusResult["purchaseState"] = PurchaseStateValue.purchased.rawValue
+                                    } else {
+                                        statusResult["isAutoRenewing"] = false
+                                    }
+                                    break
+                                }
+                            }
+                        }
+                    }
+                    
+                    break
+                }
+            case .unverified(_, _):
+                // Skip unverified transactions
+                continue
+            }
+        }
+        
+        invoke.resolve(statusResult)
+    }
+    
     private func handleTransactionUpdate(_ result: VerificationResult<Transaction>) async {
         switch result {
         case .verified(let transaction):
@@ -341,6 +422,9 @@ func initPlugin() -> Plugin {
                 invoke.reject("IAP requires iOS 15.0 or later")
             }
             @objc func acknowledgePurchase(_ invoke: Invoke) {
+                invoke.reject("IAP requires iOS 15.0 or later")
+            }
+            @objc func getProductStatus(_ invoke: Invoke) {
                 invoke.reject("IAP requires iOS 15.0 or later")
             }
         }

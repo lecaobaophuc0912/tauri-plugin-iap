@@ -46,6 +46,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
       commands::restore_purchases,
       commands::get_purchase_history,
       commands::acknowledge_purchase,
+      commands::get_product_status,
     ])
     .setup(|app, api| {
       #[cfg(target_os = "android")]

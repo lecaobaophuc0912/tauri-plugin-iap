@@ -48,3 +48,11 @@ pub(crate) async fn acknowledge_purchase<R: Runtime>(
 ) -> Result<AcknowledgePurchaseResponse> {
     app.iap().acknowledge_purchase(payload.purchase_token)
 }
+
+#[command]
+pub(crate) async fn get_product_status<R: Runtime>(
+    app: AppHandle<R>,
+    payload: GetProductStatusRequest,
+) -> Result<ProductStatus> {
+    app.iap().get_product_status(payload.product_id, payload.product_type)
+}

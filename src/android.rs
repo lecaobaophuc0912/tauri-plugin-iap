@@ -62,4 +62,11 @@ impl<R: Runtime> Iap<R> {
       .run_mobile_plugin("acknowledgePurchase", AcknowledgePurchaseRequest { purchase_token })
       .map_err(Into::into)
   }
+
+  pub fn get_product_status(&self, product_id: String, product_type: String) -> crate::Result<ProductStatus> {
+    self
+      .0
+      .run_mobile_plugin("getProductStatus", GetProductStatusRequest { product_id, product_type })
+      .map_err(Into::into)
+  }
 }
