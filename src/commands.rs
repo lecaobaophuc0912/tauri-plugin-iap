@@ -35,13 +35,6 @@ pub(crate) async fn restore_purchases<R: Runtime>(
 }
 
 #[command]
-pub(crate) async fn get_purchase_history<R: Runtime>(
-    app: AppHandle<R>,
-) -> Result<GetPurchaseHistoryResponse> {
-    app.iap().get_purchase_history()
-}
-
-#[command]
 pub(crate) async fn acknowledge_purchase<R: Runtime>(
     app: AppHandle<R>,
     payload: AcknowledgePurchaseRequest,

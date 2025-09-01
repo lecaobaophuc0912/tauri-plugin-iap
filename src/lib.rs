@@ -5,10 +5,10 @@ use tauri::{
 
 pub use models::*;
 
-#[cfg(target_os = "android")]
-mod android;
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-mod apple;
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(mobile)]
+mod mobile;
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 mod desktop;
 
@@ -18,10 +18,10 @@ mod models;
 
 pub use error::{Error, Result};
 
-#[cfg(target_os = "android")]
-use android::Iap;
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-use apple::Iap;
+#[cfg(target_os = "macos")]
+use macos::Iap;
+#[cfg(mobile)]
+use mobile::Iap;
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 use desktop::Iap;
 
@@ -44,15 +44,14 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
       commands::get_products,
       commands::purchase,
       commands::restore_purchases,
-      commands::get_purchase_history,
       commands::acknowledge_purchase,
       commands::get_product_status,
     ])
     .setup(|app, api| {
-      #[cfg(target_os = "android")]
-      let iap = android::init(app, api)?;
-      #[cfg(any(target_os = "macos", target_os = "ios"))]
-      let iap = apple::init(app, api)?;
+      #[cfg(target_os = "macos")]
+      let iap = macos::init(app, api)?;
+      #[cfg(mobile)]
+      let iap = mobile::init(app, api)?;
       #[cfg(any(target_os = "windows", target_os = "linux"))]
       let iap = desktop::init(app, api)?;
       app.manage(iap);

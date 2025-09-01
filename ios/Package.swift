@@ -17,7 +17,7 @@ let package = Package(
             targets: ["tauri-plugin-iap"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/Choochmeque/tauri-swift-runtime.git", from: "0.1.1")
+        .package(name: "Tauri", path: "../.tauri/tauri-api")
     ],
     targets: [
         // Targets are the basic building blocks of a package. A target can define a module or a test suite.
@@ -25,7 +25,7 @@ let package = Package(
         .target(
             name: "tauri-plugin-iap",
             dependencies: [
-                .product(name: "TauriSwiftRuntime", package: "tauri-swift-runtime")
+                .byName(name: "Tauri")
             ],
             path: "Sources")
     ]

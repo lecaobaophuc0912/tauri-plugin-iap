@@ -11,7 +11,7 @@ pub enum Error {
   PluginInvoke(#[from] tauri::plugin::mobile::PluginInvokeError),
   #[cfg(any(target_os = "macos", target_os = "ios"))]
   #[error(transparent)]
-  PluginInvoke(#[from] tauri_swift_runtime::PluginInvokeError),
+  PluginInvoke(#[from] serde_json::Error),
 }
 
 impl Serialize for Error {
