@@ -2,6 +2,7 @@
 
 ![NPM Version](https://img.shields.io/npm/v/@choochmeque%2Ftauri-plugin-iap-api)
 ![Crates.io Version](https://img.shields.io/crates/v/tauri-plugin-iap)
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
 
 # Tauri Plugin IAP
@@ -224,4 +225,4 @@ Listens for purchase state changes.
 
 ## License
 
-MIT or Apache-2.0
+[MIT](LICENSE)
