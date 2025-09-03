@@ -6,7 +6,7 @@ use crate::models::*;
 #[swift_bridge::bridge]
 mod ffi {
     pub enum FFIResult {
-        Ok(String), // json string from Swift
+        Ok(String),  // json string from Swift
         Err(String), // error message from Swift
     }
 
@@ -39,10 +39,13 @@ impl<R: Runtime> Iap<R> {
     fn to_result<T: serde::de::DeserializeOwned>(bridged: ffi::FFIResult) -> crate::Result<T> {
         match bridged {
             ffi::FFIResult::Ok(response) => {
-                let parsed: T = serde_json::from_str(&response).map_err(Into::<serde_json::Error>::into)?;
+                let parsed: T =
+                    serde_json::from_str(&response).map_err(Into::<serde_json::Error>::into)?;
                 Ok(parsed)
             }
-            ffi::FFIResult::Err(err) => Err(std::io::Error::new(std::io::ErrorKind::Other, err).into()),
+            ffi::FFIResult::Err(err) => {
+                Err(std::io::Error::new(std::io::ErrorKind::Other, err).into())
+            }
         }
     }
 

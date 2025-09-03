@@ -158,7 +158,10 @@ impl<'de> Deserialize<'de> for PurchaseStateValue {
             0 => Ok(PurchaseStateValue::Purchased),
             1 => Ok(PurchaseStateValue::Canceled),
             2 => Ok(PurchaseStateValue::Pending),
-            _ => Err(serde::de::Error::custom(format!("Invalid purchase state: {}", value))),
+            _ => Err(serde::de::Error::custom(format!(
+                "Invalid purchase state: {}",
+                value
+            ))),
         }
     }
 }

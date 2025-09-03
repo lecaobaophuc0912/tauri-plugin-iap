@@ -10,17 +10,20 @@ links = "tauri-plugin-iap"
 license = "MIT"
 repository = "https://github.com/Choochmeque/tauri-plugin-iap"
 
+[features]
+unstable = []
+
 [dependencies]
 tauri = { version = "2.7.0" }
 serde = "1.0"
 thiserror = "2"
 
-[target.'cfg(target_os = "macos")'.dependencies]
+[target.'cfg(all(target_os = "macos", feature = "unstable"))'.dependencies]
 swift-bridge = { version = "0.1", features = ["async"] }
 serde_json = "1.0"
 
 [build-dependencies]
 tauri-plugin = { version = "2.3.0", features = ["build"] }
 
-[target.'cfg(target_os = "macos")'.build-dependencies]
+[target.'cfg(all(target_os = "macos", feature = "unstable"))'.build-dependencies]
 swift-bridge-build = "0.1"

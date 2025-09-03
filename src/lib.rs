@@ -1,16 +1,20 @@
 use tauri::{
-  plugin::{Builder, TauriPlugin},
-  Manager, Runtime,
+    plugin::{Builder, TauriPlugin},
+    Manager, Runtime,
 };
 
 pub use models::*;
 
-#[cfg(target_os = "macos")]
+#[cfg(any(
+    target_os = "windows",
+    target_os = "linux",
+    all(target_os = "macos", not(feature = "unstable"))
+))]
+mod desktop;
+#[cfg(all(target_os = "macos", feature = "unstable"))]
 mod macos;
 #[cfg(mobile)]
 mod mobile;
-#[cfg(any(target_os = "windows", target_os = "linux"))]
-mod desktop;
 
 mod commands;
 mod error;
@@ -18,44 +22,52 @@ mod models;
 
 pub use error::{Error, Result};
 
-#[cfg(target_os = "macos")]
+#[cfg(any(
+    target_os = "windows",
+    target_os = "linux",
+    all(target_os = "macos", not(feature = "unstable"))
+))]
+use desktop::Iap;
+#[cfg(all(target_os = "macos", feature = "unstable"))]
 use macos::Iap;
 #[cfg(mobile)]
 use mobile::Iap;
-#[cfg(any(target_os = "windows", target_os = "linux"))]
-use desktop::Iap;
 
 /// Extensions to [`tauri::App`], [`tauri::AppHandle`] and [`tauri::Window`] to access the iap APIs.
 pub trait IapExt<R: Runtime> {
-  fn iap(&self) -> &Iap<R>;
+    fn iap(&self) -> &Iap<R>;
 }
 
 impl<R: Runtime, T: Manager<R>> crate::IapExt<R> for T {
-  fn iap(&self) -> &Iap<R> {
-    self.state::<Iap<R>>().inner()
-  }
+    fn iap(&self) -> &Iap<R> {
+        self.state::<Iap<R>>().inner()
+    }
 }
 
 /// Initializes the plugin.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
-  Builder::new("iap")
-    .invoke_handler(tauri::generate_handler![
-      commands::initialize,
-      commands::get_products,
-      commands::purchase,
-      commands::restore_purchases,
-      commands::acknowledge_purchase,
-      commands::get_product_status,
-    ])
-    .setup(|app, api| {
-      #[cfg(target_os = "macos")]
-      let iap = macos::init(app, api)?;
-      #[cfg(mobile)]
-      let iap = mobile::init(app, api)?;
-      #[cfg(any(target_os = "windows", target_os = "linux"))]
-      let iap = desktop::init(app, api)?;
-      app.manage(iap);
-      Ok(())
-    })
-    .build()
+    Builder::new("iap")
+        .invoke_handler(tauri::generate_handler![
+            commands::initialize,
+            commands::get_products,
+            commands::purchase,
+            commands::restore_purchases,
+            commands::acknowledge_purchase,
+            commands::get_product_status,
+        ])
+        .setup(|app, api| {
+            #[cfg(all(target_os = "macos", feature = "unstable"))]
+            let iap = macos::init(app, api)?;
+            #[cfg(mobile)]
+            let iap = mobile::init(app, api)?;
+            #[cfg(any(
+                target_os = "windows",
+                target_os = "linux",
+                all(target_os = "macos", not(feature = "unstable"))
+            ))]
+            let iap = desktop::init(app, api)?;
+            app.manage(iap);
+            Ok(())
+        })
+        .build()
 }
