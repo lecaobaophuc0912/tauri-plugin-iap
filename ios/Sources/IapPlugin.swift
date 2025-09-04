@@ -61,7 +61,13 @@ class IapPlugin: Plugin {
         invoke.resolve(["success": true])
     }
     
-    @objc public func getProducts(_ invoke: Invoke) async throws {
+    @objc public func getProducts(_ invoke: Invoke) throws {
+        Task {
+            try await self.getProducts(invoke)
+        }
+    }
+
+    public func getProducts(_ invoke: Invoke) async throws {
         let args = try invoke.parseArgs(GetProductsArgs.self)
         
         do {
@@ -135,7 +141,13 @@ class IapPlugin: Plugin {
         }
     }
     
-    @objc public func purchase(_ invoke: Invoke) async throws {
+    @objc public func purchase(_ invoke: Invoke) throws {
+        Task {
+            try await self.purchase(invoke)
+        }
+    }
+
+    public func purchase(_ invoke: Invoke) async throws {
         let args = try invoke.parseArgs(PurchaseArgs.self)
         
         do {
@@ -176,7 +188,13 @@ class IapPlugin: Plugin {
         }
     }
     
-    @objc public func restorePurchases(_ invoke: Invoke) async throws {
+    @objc public func restorePurchases(_ invoke: Invoke) throws {
+        Task {
+            try await self.restorePurchases(invoke)
+        }
+    }
+
+    public func restorePurchases(_ invoke: Invoke) async throws {
         let args = try? invoke.parseArgs(RestorePurchasesArgs.self)
         var purchases: [[String: Any]] = []
         
@@ -219,8 +237,14 @@ class IapPlugin: Plugin {
             invoke.reject("Failed to restore purchases: \(error.localizedDescription)")
         }
     }
-    
-    @objc public func getPurchaseHistory(_ invoke: Invoke) async throws {
+
+    @objc public func getPurchaseHistory(_ invoke: Invoke) throws {
+        Task {
+            try await self.getPurchaseHistory(invoke)
+        }
+    }
+
+    public func getPurchaseHistory(_ invoke: Invoke) async throws {
         var history: [[String: Any]] = []
         
         do {
@@ -253,7 +277,13 @@ class IapPlugin: Plugin {
         invoke.resolve(["success": true])
     }
     
-    @objc public func getProductStatus(_ invoke: Invoke) async throws {
+    @objc public func getProductStatus(_ invoke: Invoke) throws {
+        Task {
+            try await self.getProductStatus(invoke)
+        }
+    }
+
+    public func getProductStatus(_ invoke: Invoke) async throws {
         let args = try invoke.parseArgs(GetProductStatusArgs.self)
         
         var statusResult: [String: Any] = [
