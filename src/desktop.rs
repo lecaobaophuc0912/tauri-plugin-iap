@@ -15,8 +15,7 @@ pub struct Iap<R: Runtime>(AppHandle<R>);
 
 impl<R: Runtime> Iap<R> {
     pub fn initialize(&self) -> crate::Result<InitializeResponse> {
-        Err(crate::Error::from(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        Err(crate::Error::from(std::io::Error::other(
             "IAP is not supported on this platform",
         )))
     }
@@ -26,8 +25,7 @@ impl<R: Runtime> Iap<R> {
         _product_ids: Vec<String>,
         _product_type: String,
     ) -> crate::Result<GetProductsResponse> {
-        Err(crate::Error::from(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        Err(crate::Error::from(std::io::Error::other(
             "IAP is not supported on this platform",
         )))
     }
@@ -38,8 +36,7 @@ impl<R: Runtime> Iap<R> {
         _product_type: String,
         _offer_token: Option<String>,
     ) -> crate::Result<Purchase> {
-        Err(crate::Error::from(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        Err(crate::Error::from(std::io::Error::other(
             "IAP is not supported on this platform",
         )))
     }
@@ -48,15 +45,13 @@ impl<R: Runtime> Iap<R> {
         &self,
         _product_type: String,
     ) -> crate::Result<RestorePurchasesResponse> {
-        Err(crate::Error::from(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        Err(crate::Error::from(std::io::Error::other(
             "IAP is not supported on this platform",
         )))
     }
 
     pub fn get_purchase_history(&self) -> crate::Result<GetPurchaseHistoryResponse> {
-        Err(crate::Error::from(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        Err(crate::Error::from(std::io::Error::other(
             "IAP is not supported on this platform",
         )))
     }
@@ -65,8 +60,7 @@ impl<R: Runtime> Iap<R> {
         &self,
         _purchase_token: String,
     ) -> crate::Result<AcknowledgePurchaseResponse> {
-        Err(crate::Error::from(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        Err(crate::Error::from(std::io::Error::other(
             "IAP is not supported on this platform",
         )))
     }
@@ -76,8 +70,7 @@ impl<R: Runtime> Iap<R> {
         _product_id: String,
         _product_type: String,
     ) -> crate::Result<ProductStatus> {
-        Err(crate::Error::from(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        Err(crate::Error::from(std::io::Error::other(
             "IAP is not supported on this platform",
         )))
     }
