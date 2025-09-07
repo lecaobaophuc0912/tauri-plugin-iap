@@ -1,4 +1,4 @@
-#[cfg(feature = "unstable")]
+#[cfg(all(feature = "unstable", target_os = "macos"))]
 use std::{path::PathBuf, process::Command};
 
 const COMMANDS: &[&str] = &[
@@ -17,7 +17,7 @@ fn main() {
         .ios_path("ios")
         .build();
 
-    #[cfg(feature = "unstable")]
+    #[cfg(all(feature = "unstable", target_os = "macos"))]
     {
         // Only run macOS-specific build steps when building for macOS
         if std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default() == "macos" {
@@ -73,7 +73,7 @@ fn main() {
     }
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(all(feature = "unstable", target_os = "macos"))]
 fn compile_swift() {
     let swift_package_dir = manifest_dir().join("macos");
 
@@ -107,33 +107,33 @@ Stdout: {}
     }
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(all(feature = "unstable", target_os = "macos"))]
 fn swift_bridge_out_dir() -> PathBuf {
     generated_code_dir()
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(all(feature = "unstable", target_os = "macos"))]
 fn manifest_dir() -> PathBuf {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     PathBuf::from(manifest_dir)
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(all(feature = "unstable", target_os = "macos"))]
 fn is_release_build() -> bool {
     std::env::var("PROFILE").unwrap() == "release"
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(all(feature = "unstable", target_os = "macos"))]
 fn swift_source_dir() -> PathBuf {
     manifest_dir().join("macos/Sources")
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(all(feature = "unstable", target_os = "macos"))]
 fn generated_code_dir() -> PathBuf {
     swift_source_dir().join("generated")
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(all(feature = "unstable", target_os = "macos"))]
 fn swift_library_static_lib_dir() -> PathBuf {
     let debug_or_release = if is_release_build() {
         "release"
