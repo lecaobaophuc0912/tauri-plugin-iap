@@ -39,12 +39,11 @@ impl<R: Runtime> Iap<R> {
     fn to_result<T: serde::de::DeserializeOwned>(bridged: ffi::FFIResult) -> crate::Result<T> {
         match bridged {
             ffi::FFIResult::Ok(response) => {
-                let parsed: T =
-                    serde_json::from_str(&response).map_err(Into::<serde_json::Error>::into)?;
+                let parsed: T = serde_json::from_str(&response)?;
                 Ok(parsed)
             }
             ffi::FFIResult::Err(err) => {
-                Err(std::io::Error::new(std::io::ErrorKind::Other, err).into())
+                Err(std::io::Error::other(err).into())
             }
         }
     }

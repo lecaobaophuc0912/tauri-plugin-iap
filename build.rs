@@ -23,7 +23,7 @@ fn main() {
         if std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default() == "macos" {
             let bridges = vec!["src/macos.rs"];
             for path in &bridges {
-                println!("cargo:rerun-if-changed={}", path);
+                println!("cargo:rerun-if-changed={path}");
             }
 
             swift_bridge_build::parse_bridges(bridges)
@@ -59,15 +59,14 @@ fn main() {
             "cargo:rustc-link-search={}/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx/",
             &xcode_path
         );
-            println!("cargo:rustc-link-search={}", "/usr/lib/swift");
+            println!("cargo:rustc-link-search=/usr/lib/swift");
 
             let p = "/Library/Developer/CommandLineTools/usr/lib/swift-5.5/macosx";
             println!("cargo:rustc-link-search=native={p}");
             println!("cargo:rustc-link-arg=-Wl,-rpath,{p}");
 
             println!(
-                "cargo:rustc-link-search={}",
-                "/Library/Developer/CommandLineTools/usr/lib/swift-5.5/macosx"
+                "cargo:rustc-link-search=/Library/Developer/CommandLineTools/usr/lib/swift-5.5/macosx"
             );
         }
     }
@@ -79,7 +78,7 @@ fn compile_swift() {
 
     let mut cmd = Command::new("swift");
 
-    cmd.current_dir(swift_package_dir).arg("build").args(&[
+    cmd.current_dir(swift_package_dir).arg("build").args([
         "-Xswiftc",
         "-import-objc-header",
         "-Xswiftc",
@@ -90,7 +89,7 @@ fn compile_swift() {
     ]);
 
     if is_release_build() {
-        cmd.args(&["-c", "release"]);
+        cmd.args(["-c", "release"]);
     }
 
     let exit_status = cmd.spawn().unwrap().wait_with_output().unwrap();
@@ -141,5 +140,5 @@ fn swift_library_static_lib_dir() -> PathBuf {
         "debug"
     };
 
-    manifest_dir().join(format!("macos/.build/{}", debug_or_release))
+    manifest_dir().join(format!("macos/.build/{debug_or_release}"))
 }
