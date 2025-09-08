@@ -42,9 +42,7 @@ impl<R: Runtime> Iap<R> {
                 let parsed: T = serde_json::from_str(&response)?;
                 Ok(parsed)
             }
-            ffi::FFIResult::Err(err) => {
-                Err(std::io::Error::other(err).into())
-            }
+            ffi::FFIResult::Err(err) => Err(std::io::Error::other(err).into()),
         }
     }
 

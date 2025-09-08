@@ -15,7 +15,12 @@
     "repos",
     "shrinkwrap",
     "streetsidesoftware",
-    "tauri"
+    "tauri",
+    "rustc",
+    "xctoolchain",
+    "rpath",
+    "Xswiftc",
+    "objc"
   ],
   "useGitignore": true,
   "ignorePaths": [
