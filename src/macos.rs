@@ -4,7 +4,10 @@ use tauri::{plugin::PluginApi, AppHandle, Runtime};
 use crate::models::*;
 
 mod codesign {
-    use objc2_security::{kSecCSCheckAllArchitectures, kSecCSCheckNestedCode, kSecCSStrictValidate, SecCSFlags, SecCode};
+    use objc2_security::{
+        kSecCSCheckAllArchitectures, kSecCSCheckNestedCode, kSecCSStrictValidate, SecCSFlags,
+        SecCode,
+    };
     use std::ptr::NonNull;
 
     /// Returns `Ok(())` if the running binary is code-signed and valid, otherwise returns an Error.
@@ -23,13 +26,11 @@ mod codesign {
             }
 
             // 2) Validate the dynamic code - this checks if the signature is valid
-            let validity_flags = SecCSFlags(kSecCSCheckAllArchitectures | kSecCSCheckNestedCode | kSecCSStrictValidate);
-            let self_code_ref = self_code_ptr.as_ref().as_ref().unwrap();
-            let status = SecCode::check_validity(
-                self_code_ref,
-                validity_flags,
-                None,
+            let validity_flags = SecCSFlags(
+                kSecCSCheckAllArchitectures | kSecCSCheckNestedCode | kSecCSStrictValidate,
             );
+            let self_code_ref = self_code_ptr.as_ref().as_ref().unwrap();
+            let status = SecCode::check_validity(self_code_ref, validity_flags, None);
             if status != 0 {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
