@@ -6,7 +6,6 @@ use tauri::{
 pub use models::*;
 
 #[cfg(any(
-    target_os = "windows",
     target_os = "linux",
     all(target_os = "macos", not(feature = "unstable"))
 ))]
@@ -15,6 +14,8 @@ mod desktop;
 mod macos;
 #[cfg(mobile)]
 mod mobile;
+#[cfg(target_os = "windows")]
+mod windows;
 
 mod commands;
 mod error;
@@ -23,7 +24,6 @@ mod models;
 pub use error::{Error, Result};
 
 #[cfg(any(
-    target_os = "windows",
     target_os = "linux",
     all(target_os = "macos", not(feature = "unstable"))
 ))]
@@ -32,6 +32,8 @@ use desktop::Iap;
 use macos::Iap;
 #[cfg(mobile)]
 use mobile::Iap;
+#[cfg(target_os = "windows")]
+use windows::Iap;
 
 /// Extensions to [`tauri::App`], [`tauri::AppHandle`] and [`tauri::Window`] to access the iap APIs.
 pub trait IapExt<R: Runtime> {
@@ -60,8 +62,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             let iap = macos::init(app, api)?;
             #[cfg(mobile)]
             let iap = mobile::init(app, api)?;
+            #[cfg(target_os = "windows")]
+            let iap = windows::init(app, api)?;
             #[cfg(any(
-                target_os = "windows",
                 target_os = "linux",
                 all(target_os = "macos", not(feature = "unstable"))
             ))]
