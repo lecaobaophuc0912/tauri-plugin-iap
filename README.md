@@ -42,7 +42,7 @@ Add the plugin to your Tauri project's `Cargo.toml`:
 
 ```toml
 [dependencies]
-tauri-plugin-iap = "0.1"
+tauri-plugin-iap = "0.3"
 ```
 
 Configure the plugin permissions in your `capabilities/default.json`:
