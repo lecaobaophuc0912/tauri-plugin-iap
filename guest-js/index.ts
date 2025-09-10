@@ -140,7 +140,7 @@ export interface PurchaseOptions {
 /**
  * Initialize the IAP plugin.
  * Must be called before any other IAP operations.
- * 
+ *
  * @returns Promise resolving to initialization status
  * @example
  * ```typescript
@@ -156,7 +156,7 @@ export async function initialize(): Promise<InitializeResponse> {
 
 /**
  * Fetch product information from the app store.
- * 
+ *
  * @param productIds - Array of product identifiers to fetch
  * @param productType - Type of products: "subs" for subscriptions, "inapp" for one-time purchases
  * @returns Promise resolving to product information
@@ -182,7 +182,7 @@ export async function getProducts(
 
 /**
  * Initiate a purchase for the specified product.
- * 
+ *
  * @param productId - Product identifier to purchase
  * @param productType - Type of product: "subs" or "inapp"
  * @param options - Optional purchase parameters (platform-specific)
@@ -191,12 +191,12 @@ export async function getProducts(
  * ```typescript
  * // Simple purchase
  * const purchase = await purchase('com.example.premium', 'subs');
- * 
+ *
  * // With options (iOS)
  * const purchase = await purchase('com.example.premium', 'subs', {
  *   appAccountToken: '550e8400-e29b-41d4-a716-446655440000' // Must be valid UUID
  * });
- * 
+ *
  * // With options (Android)
  * const purchase = await purchase('com.example.premium', 'subs', {
  *   offerToken: 'offer_token_here',
@@ -221,7 +221,7 @@ export async function purchase(
 
 /**
  * Restore user's previous purchases.
- * 
+ *
  * @param productType - Type of products to restore: "subs" or "inapp"
  * @returns Promise resolving to list of restored purchases
  * @example
@@ -248,7 +248,7 @@ export async function restorePurchases(
 /**
  * Get the user's purchase history.
  * Note: Not supported on all platforms.
- * 
+ *
  * @returns Promise resolving to purchase history
  * @example
  * ```typescript
@@ -268,7 +268,7 @@ export async function getPurchaseHistory(): Promise<GetPurchaseHistoryResponse> 
  * Acknowledge a purchase (Android only).
  * Purchases must be acknowledged within 3 days or they will be refunded.
  * iOS automatically acknowledges purchases.
- * 
+ *
  * @param purchaseToken - Purchase token from the transaction
  * @returns Promise resolving to acknowledgment status
  * @example
@@ -295,7 +295,7 @@ export async function acknowledgePurchase(
 /**
  * Get the current status of a product for the user.
  * Checks if the product is owned, expired, or available for purchase.
- * 
+ *
  * @param productId - Product identifier to check
  * @param productType - Type of product: "subs" or "inapp"
  * @returns Promise resolving to product status
@@ -325,7 +325,7 @@ export async function getProductStatus(
 /**
  * Listen for purchase updates.
  * This event is triggered when a purchase state changes.
- * 
+ *
  * @param callback - Function to call when a purchase is updated
  * @returns Cleanup function to stop listening
  * @example
@@ -336,7 +336,7 @@ export async function getProductStatus(
  *     // Handle successful purchase
  *   }
  * });
- * 
+ *
  * // Later, stop listening
  * unsubscribe();
  * ```
