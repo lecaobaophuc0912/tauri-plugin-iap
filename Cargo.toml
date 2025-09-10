@@ -11,7 +11,7 @@ license = "MIT"
 repository = "https://github.com/Choochmeque/tauri-plugin-iap"
 
 [features]
-default = ["unstable"]
+default = []
 unstable = ["dep:swift-bridge", "dep:serde_json", "dep:objc2", "dep:objc2-core-foundation", "dep:objc2-security"]
 
 [dependencies]
