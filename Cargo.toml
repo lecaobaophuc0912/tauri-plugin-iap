@@ -1,6 +1,6 @@
 [package]
 name = "tauri-plugin-iap"
-version = "0.2.1"
+version = "0.3.2"
 authors = ["You"]
 description = "A Tauri v2 plugin that enables In-App Purchases (IAP)"
 edition = "2021"
@@ -11,7 +11,7 @@ license = "MIT"
 repository = "https://github.com/Choochmeque/tauri-plugin-iap"
 
 [features]
-default = ["unstable"]
+default = []
 unstable = [
     "dep:swift-bridge",
     "dep:serde_json",

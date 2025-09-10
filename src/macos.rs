@@ -119,10 +119,11 @@ impl<R: Runtime> Iap<R> {
         &self,
         product_id: String,
         product_type: String,
-        offer_token: Option<String>,
+        options: Option<PurchaseOptions>,
     ) -> crate::Result<Purchase> {
         codesign::is_signature_valid()?;
 
+        let offer_token = options.and_then(|opts| opts.offer_token);
         Self::to_result(ffi::purchase(product_id, product_type, offer_token))
     }
 

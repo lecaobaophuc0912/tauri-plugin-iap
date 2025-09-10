@@ -55,7 +55,7 @@ impl<R: Runtime> Iap<R> {
         &self,
         product_id: String,
         product_type: String,
-        offer_token: Option<String>,
+        options: Option<PurchaseOptions>,
     ) -> crate::Result<Purchase> {
         self.0
             .run_mobile_plugin(
@@ -63,7 +63,7 @@ impl<R: Runtime> Iap<R> {
                 PurchaseRequest {
                     product_id,
                     product_type,
-                    offer_token,
+                    options,
                 },
             )
             .map_err(Into::into)

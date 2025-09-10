@@ -20,6 +20,9 @@ A Tauri plugin for In-App Purchases (IAP) with support for subscriptions on both
 - Real-time purchase state updates via events
 - Automatic transaction verification (iOS)
 - Support for introductory offers and free trials
+- Fraud prevention with obfuscated account/profile IDs (Android)
+- App account token support for tracking (iOS)
+- Automatic offer token selection (Android)
 
 ## Platform Support
 
@@ -42,7 +45,7 @@ Add the plugin to your Tauri project's `Cargo.toml`:
 
 ```toml
 [dependencies]
-tauri-plugin-iap = "0.1"
+tauri-plugin-iap = "0.3"
 ```
 
 Configure the plugin permissions in your `capabilities/default.json`:
@@ -98,9 +101,24 @@ if (status.isOwned && status.purchaseState === PurchaseState.PURCHASED) {
 }
 
 // Purchase a subscription or in-app product
-// On Android: use the offer token from subscriptionOfferDetails
-// On iOS: offer token is not used
-const purchaseResult = await purchase('subscription_id_1', 'subs', offerToken);
+// Simple purchase (will use first available offer on Android if not specified)
+const purchaseResult = await purchase('subscription_id_1', 'subs');
+
+// With specific offer token (Android)
+const purchaseResult = await purchase('subscription_id_1', 'subs', {
+  offerToken: product.subscriptionOfferDetails[0].offerToken
+});
+
+// With fraud prevention (Android)
+const purchaseResult = await purchase('subscription_id_1', 'subs', {
+  obfuscatedAccountId: 'hashed_account_id',
+  obfuscatedProfileId: 'hashed_profile_id'
+});
+
+// With app account token (iOS - must be valid UUID)
+const purchaseResult = await purchase('subscription_id_1', 'subs', {
+  appAccountToken: '550e8400-e29b-41d4-a716-446655440000'
+});
 
 // Restore purchases (specify product type)
 const restored = await restorePurchases('subs');
@@ -154,13 +172,17 @@ Fetches product details from the store.
   - `formattedPrice`: Localized price string
   - `subscriptionOfferDetails`: (subscriptions only) Array of offers
 
-### `purchase(productId: string, productType: 'subs' | 'inapp' = 'subs', offerToken?: string)`
-Initiates a purchase flow.
+### `purchase(productId: string, productType: 'subs' | 'inapp' = 'subs', options?: PurchaseOptions)`
+Initiates a purchase flow with enhanced options for fraud prevention and account management.
 
 **Parameters:**
 - `productId`: The product to purchase
 - `productType`: Type of product ('subs' for subscriptions, 'inapp' for one-time purchases), defaults to 'subs'
-- `offerToken`: (Android only) The offer token for subscriptions
+- `options`: Optional purchase parameters:
+  - `offerToken`: (Android) Specific offer to purchase. If not provided, uses first available offer
+  - `obfuscatedAccountId`: (Android) Hashed account ID for fraud prevention
+  - `obfuscatedProfileId`: (Android) Hashed profile ID for fraud prevention
+  - `appAccountToken`: (iOS) UUID string for account tracking and fraud prevention
 
 **Returns:** Purchase object with transaction details
 

@@ -14,6 +14,7 @@ class PurchaseArgs: Decodable {
     let productId: String
     let productType: String?
     let offerToken: String?
+    let appAccountToken: String?
 }
 
 class RestorePurchasesArgs: Decodable {
@@ -157,8 +158,22 @@ class IapPlugin: Plugin {
                 return
             }
             
-            // Initiate purchase
-            let result = try await product.purchase()
+            // Prepare purchase options
+            var purchaseOptions: Set<Product.PurchaseOption> = []
+            
+            // Add appAccountToken if provided (must be a valid UUID)
+            if let appAccountToken = args.appAccountToken {
+                guard let uuid = UUID(uuidString: appAccountToken) else {
+                    invoke.reject("Invalid appAccountToken: must be a valid UUID string")
+                    return
+                }
+                purchaseOptions.insert(.appAccountToken(uuid))
+            }
+            
+            // Initiate purchase with options
+            let result = purchaseOptions.isEmpty 
+                ? try await product.purchase()
+                : try await product.purchase(options: purchaseOptions)
             
             switch result {
             case .success(let verification):
