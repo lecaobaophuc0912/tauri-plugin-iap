@@ -25,7 +25,7 @@ pub(crate) async fn purchase<R: Runtime>(
     app.iap().purchase(
         payload.product_id,
         payload.product_type,
-        payload.offer_token,
+        payload.options,
     )
 }
 

@@ -30,6 +30,8 @@ class PurchaseArgs {
     var productId: String = ""
     var productType: String = "subs" // "subs" or "inapp"
     var offerToken: String? = null
+    var obfuscatedAccountId: String? = null
+    var obfuscatedProfileId: String? = null
 }
 
 @InvokeArg
@@ -232,9 +234,20 @@ class IapPlugin(private val activity: Activity): Plugin(activity), PurchasesUpda
                     )
                 }
                 
-                val billingFlowParams = BillingFlowParams.newBuilder()
+                val billingFlowParamsBuilder = BillingFlowParams.newBuilder()
                     .setProductDetailsParamsList(productDetailsParamsList)
-                    .build()
+                
+                // Add obfuscated account ID if provided
+                args.obfuscatedAccountId?.let { accountId ->
+                    billingFlowParamsBuilder.setObfuscatedAccountId(accountId)
+                }
+                
+                // Add obfuscated profile ID if provided
+                args.obfuscatedProfileId?.let { profileId ->
+                    billingFlowParamsBuilder.setObfuscatedProfileId(profileId)
+                }
+                
+                val billingFlowParams = billingFlowParamsBuilder.build()
                 
                 val billingResult = billingClient.launchBillingFlow(activity, billingFlowParams)
                 

@@ -87,6 +87,12 @@ export interface ProductStatus {
   purchaseToken?: string;
 }
 
+export interface PurchaseOptions {
+  offerToken?: string;
+  obfuscatedAccountId?: string;
+  obfuscatedProfileId?: string;
+}
+
 export async function initialize(): Promise<InitializeResponse> {
   return await invoke<InitializeResponse>("plugin:iap|initialize");
 }
@@ -106,13 +112,13 @@ export async function getProducts(
 export async function purchase(
   productId: string,
   productType: "subs" | "inapp" = "subs",
-  offerToken?: string,
+  options?: PurchaseOptions,
 ): Promise<Purchase> {
   return await invoke<Purchase>("plugin:iap|purchase", {
     payload: {
       productId,
       productType,
-      offerToken,
+      ...options,
     },
   });
 }

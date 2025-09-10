@@ -34,7 +34,7 @@ impl<R: Runtime> Iap<R> {
         &self,
         _product_id: String,
         _product_type: String,
-        _offer_token: Option<String>,
+        _options: Option<PurchaseOptions>,
     ) -> crate::Result<Purchase> {
         Err(crate::Error::from(std::io::Error::other(
             "IAP is not supported on this platform",

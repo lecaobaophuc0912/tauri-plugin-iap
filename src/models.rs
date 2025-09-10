@@ -65,14 +65,25 @@ pub struct GetProductsResponse {
     pub products: Vec<Product>,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PurchaseOptions {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub offer_token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub obfuscated_account_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub obfuscated_profile_id: Option<String>,
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PurchaseRequest {
     pub product_id: String,
     #[serde(default = "default_product_type")]
     pub product_type: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub offer_token: Option<String>,
+    #[serde(flatten)]
+    pub options: Option<PurchaseOptions>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
