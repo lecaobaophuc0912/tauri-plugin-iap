@@ -74,6 +74,8 @@ pub struct PurchaseOptions {
     pub obfuscated_account_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub obfuscated_profile_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub app_account_token: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
