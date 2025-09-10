@@ -219,20 +219,16 @@ class IapPlugin(private val activity: Activity): Plugin(activity), PurchasesUpda
             if (billingResult.responseCode == BillingClient.BillingResponseCode.OK && productDetailsResult.productDetailsList.isNotEmpty()) {
                 val productDetails = productDetailsResult.productDetailsList[0]
 
-                val productDetailsParamsList = if (args.offerToken != null) {
-                    listOf(
-                        BillingFlowParams.ProductDetailsParams.newBuilder()
-                            .setProductDetails(productDetails)
-                            .setOfferToken(args.offerToken!!)
-                            .build()
-                    )
-                } else {
-                    listOf(
-                        BillingFlowParams.ProductDetailsParams.newBuilder()
-                            .setProductDetails(productDetails)
-                            .build()
-                    )
-                }
+                // Get offer token from args or from first available subscription offer
+                val offerToken = args.offerToken ?: 
+                    productDetails.subscriptionOfferDetails?.firstOrNull()?.offerToken
+                
+                val productDetailsParamsBuilder = BillingFlowParams.ProductDetailsParams.newBuilder()
+                    .setProductDetails(productDetails)
+                
+                offerToken?.let { productDetailsParamsBuilder.setOfferToken(it) }
+                
+                val productDetailsParamsList = listOf(productDetailsParamsBuilder.build())
                 
                 val billingFlowParamsBuilder = BillingFlowParams.newBuilder()
                     .setProductDetailsParamsList(productDetailsParamsList)
