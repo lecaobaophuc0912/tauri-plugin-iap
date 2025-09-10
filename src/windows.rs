@@ -239,7 +239,7 @@ impl<R: Runtime> Iap<R> {
         &self,
         product_id: String,
         product_type: String,
-        offer_token: Option<String>,
+        options: Option<PurchaseOptions>,
     ) -> crate::Result<Purchase> {
         let context = self.get_store_context()?;
 
@@ -254,6 +254,7 @@ impl<R: Runtime> Iap<R> {
         let store_id = HSTRING::from(&product_id);
 
         // Create purchase properties if we have an offer token (for subscriptions)
+        let offer_token = options.and_then(|opts| opts.offer_token);
         let purchase_result = if let Some(token) = offer_token {
             let properties = StorePurchaseProperties::Create(&HSTRING::from(&product_id))?;
 
