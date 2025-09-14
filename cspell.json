@@ -25,7 +25,9 @@
     "unlisten",
     "inapp",
     "thiserror",
-    "codesign"
+    "codesign",
+    "HSTRING",
+    "skus"
   ],
   "useGitignore": true,
   "ignorePaths": [
