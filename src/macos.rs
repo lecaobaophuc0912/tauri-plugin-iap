@@ -18,11 +18,12 @@ mod codesign {
             let self_code_ptr = NonNull::<*mut SecCode>::new_unchecked(&mut self_code);
             let status = SecCode::copy_self(SecCSFlags::empty(), self_code_ptr);
             if status != 0 {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to get code reference: OSStatus {}", status),
-                )
-                .into());
+                let error_response = crate::error::ErrorResponse {
+                    code: Some(status.to_string()),
+                    message: Some(format!("Failed to get code reference: OSStatus {status}")),
+                    data: (),
+                };
+                return Err(crate::error::PluginInvokeError::InvokeRejected(error_response).into());
             }
 
             // 2) Validate the dynamic code - this checks if the signature is valid
@@ -32,11 +33,14 @@ mod codesign {
             let self_code_ref = self_code_ptr.as_ref().as_ref().unwrap();
             let status = SecCode::check_validity(self_code_ref, validity_flags, None);
             if status != 0 {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Code signature validation failed: OSStatus {}", status),
-                )
-                .into());
+                let error_response = crate::error::ErrorResponse {
+                    code: Some(status.to_string()),
+                    message: Some(format!(
+                        "Code signature validation failed: OSStatus {status}"
+                    )),
+                    data: (),
+                };
+                return Err(crate::error::PluginInvokeError::InvokeRejected(error_response).into());
             }
 
             Ok(())
@@ -80,10 +84,18 @@ impl<R: Runtime> Iap<R> {
     fn to_result<T: serde::de::DeserializeOwned>(bridged: ffi::FFIResult) -> crate::Result<T> {
         match bridged {
             ffi::FFIResult::Ok(response) => {
-                let parsed: T = serde_json::from_str(&response)?;
+                let parsed: T = serde_json::from_str(&response)
+                    .map_err(crate::error::PluginInvokeError::CannotDeserializeResponse)?;
                 Ok(parsed)
             }
-            ffi::FFIResult::Err(err) => Err(std::io::Error::other(err).into()),
+            ffi::FFIResult::Err(err) => {
+                let error_response = crate::error::ErrorResponse {
+                    code: None,
+                    message: Some(err),
+                    data: (),
+                };
+                Err(crate::error::PluginInvokeError::InvokeRejected(error_response).into())
+            }
         }
     }
 

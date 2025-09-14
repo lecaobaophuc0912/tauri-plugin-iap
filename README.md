@@ -7,7 +7,7 @@
 
 # Tauri Plugin IAP
 
-A Tauri plugin for In-App Purchases (IAP) with support for subscriptions on both iOS (StoreKit 2) and Android (Google Play Billing).
+A Tauri plugin for In-App Purchases (IAP) with support for subscriptions on iOS (StoreKit 2), Android (Google Play Billing) and Windows (Microsoft Store).
 
 ## Features
 
@@ -28,6 +28,7 @@ A Tauri plugin for In-App Purchases (IAP) with support for subscriptions on both
 
 - **iOS**: StoreKit 2 (requires iOS 15.0+)
 - **Android**: Google Play Billing Library v8.0.0
+- **Windows**: Microsoft Store API (Windows 10/11)
 
 ## Installation
 
@@ -155,6 +156,13 @@ unlisten();
 3. Configure your app's billing permissions (already included in the plugin)
 4. Test with test accounts or sandbox environment
 
+### Windows Setup
+
+1. Register your app in Microsoft Partner Center
+2. Create add-on products (consumables, durables, or subscriptions)
+3. Associate your app with the Microsoft Store
+4. Test with Windows sandbox environment
+
 ## API Reference
 
 ### `initialize()`
@@ -233,6 +241,11 @@ Listens for purchase state changes.
 - Offer tokens required for subscription purchases
 - More detailed pricing phase information
 
+### Windows (Microsoft Store)
+- Automatic acknowledgment handled by the Store
+- Supports consumables, durables, and subscriptions
+- Uses SKUs for subscription offer variations
+
 ## Testing
 
 ### iOS
@@ -244,6 +257,12 @@ Listens for purchase state changes.
 1. Upload your app to internal testing track
 2. Add test accounts in Google Play Console
 3. Test with test payment methods
+
+### Windows
+1. Use Microsoft Store sandbox environment
+2. Configure test accounts in Partner Center
+3. Test with Windows Dev Center test payment methods
+4. Ensure app is associated with Store listing
 
 ## License
 
