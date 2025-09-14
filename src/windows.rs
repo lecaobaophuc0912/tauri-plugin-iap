@@ -1,12 +1,17 @@
 use serde::de::DeserializeOwned;
+use tauri::Manager;
 use tauri::{plugin::PluginApi, AppHandle, Runtime};
-use windows::core::HSTRING;
-use windows::Foundation::DateTime;
-use windows::Services::Store::{
-    StoreContext, StoreLicense, StoreProduct, StorePurchaseProperties, StorePurchaseStatus,
+use windows::core::{Interface, HSTRING};
+use windows::{
+    Foundation::DateTime,
+    Services::Store::{
+        StoreContext, StoreLicense, StoreProduct, StorePurchaseProperties, StorePurchaseStatus,
+    },
+    Win32::UI::Shell::IInitializeWithWindow,
 };
 use windows_collections::IIterable;
 
+use crate::error::{ErrorResponse, PluginInvokeError};
 use crate::models::*;
 use std::sync::{Arc, RwLock};
 
@@ -29,18 +34,52 @@ pub struct Iap<R: Runtime> {
 impl<R: Runtime> Iap<R> {
     /// Get or create the StoreContext instance
     fn get_store_context(&self) -> crate::Result<StoreContext> {
-        let mut context_guard = self.store_context.write().unwrap();
+        let mut context_guard = self.store_context.write().map_err(|e| {
+            crate::Error::PluginInvoke(PluginInvokeError::InvokeRejected(ErrorResponse {
+                code: Some("internalError".to_string()),
+                message: Some(format!("Failed to acquire write lock: {:?}", e)),
+                data: (),
+            }))
+        })?;
 
         if context_guard.is_none() {
             // Get the default store context for the current user
-            let context = StoreContext::GetDefault().map_err(|e| {
-                std::io::Error::other(format!("Failed to get store context: {:?}", e))
+            let context = StoreContext::GetDefault()?;
+
+            let window = self.app_handle.get_webview_window("main").ok_or_else(|| {
+                crate::Error::PluginInvoke(PluginInvokeError::InvokeRejected(ErrorResponse {
+                    code: Some("windowError".to_string()),
+                    message: Some("Failed to get main window".to_string()),
+                    data: (),
+                }))
             })?;
+            let hwnd = window.hwnd().map_err(|e| {
+                crate::Error::PluginInvoke(PluginInvokeError::InvokeRejected(ErrorResponse {
+                    code: Some("windowError".to_string()),
+                    message: Some(format!("Failed to get window handle: {:?}", e)),
+                    data: (),
+                }))
+            })?;
+
+            // Cast the WinRT object to IInitializeWithWindow and initialize it with your HWND
+            let init = context.cast::<IInitializeWithWindow>()?;
+            unsafe {
+                init.Initialize(hwnd)?;
+            }
 
             *context_guard = Some(context);
         }
 
-        Ok(context_guard.as_ref().unwrap().clone())
+        Ok(context_guard
+            .as_ref()
+            .ok_or_else(|| {
+                crate::Error::PluginInvoke(PluginInvokeError::InvokeRejected(ErrorResponse {
+                    code: Some("storeNotInitialized".to_string()),
+                    message: Some("Store context not initialized".to_string()),
+                    data: (),
+                }))
+            })?
+            .clone())
     }
 
     /// Convert Windows DateTime to Unix timestamp in milliseconds
@@ -79,9 +118,8 @@ impl<R: Runtime> Iap<R> {
             "inapp" => vec![
                 HSTRING::from("Consumable"),
                 HSTRING::from("UnmanagedConsumable"),
-                HSTRING::from("Durable"),
             ],
-            "subs" => vec![HSTRING::from("Subscription")],
+            "subs" => vec![HSTRING::from("Subscription"), HSTRING::from("Durable")],
             _ => vec![
                 HSTRING::from("Consumable"),
                 HSTRING::from("UnmanagedConsumable"),
@@ -90,25 +128,27 @@ impl<R: Runtime> Iap<R> {
             ],
         };
 
-        let kinds_it: IIterable<HSTRING> = IIterable::try_from(product_kinds)
-            .map_err(|e| std::io::Error::other(format!("Failed to create IIterable: {:?}", e)))?;
-        let ids_it: IIterable<HSTRING> = IIterable::try_from(store_ids)
-            .map_err(|e| std::io::Error::other(format!("Failed to create IIterable: {:?}", e)))?;
+        let store_ids: IIterable<HSTRING> = store_ids.into();
+        let product_kinds: IIterable<HSTRING> = product_kinds.into();
 
         // Query products from the store
         let query_result = context
-            .GetStoreProductsAsync(&kinds_it, &ids_it)
-            .and_then(|async_op| async_op.get())
-            .map_err(|e| std::io::Error::other(format!("Failed to get products: {:?}", e)))?;
+            .GetStoreProductsAsync(&product_kinds, &store_ids)
+            .and_then(|async_op| async_op.get())?;
 
         // Check for any errors
         let extended_error = query_result.ExtendedError()?;
         if extended_error.is_err() {
-            return Err(std::io::Error::other(format!(
-                "Store query failed with error: {:?}",
-                extended_error.message()
-            ))
-            .into());
+            return Err(crate::Error::PluginInvoke(
+                PluginInvokeError::InvokeRejected(ErrorResponse {
+                    code: Some("storeQueryFailed".to_string()),
+                    message: Some(format!(
+                        "Store query failed with error: {:?}",
+                        extended_error.message()
+                    )),
+                    data: (),
+                }),
+            ));
         }
 
         let products_map = query_result.Products()?;
@@ -248,8 +288,17 @@ impl<R: Runtime> Iap<R> {
             self.get_products(vec![product_id.clone()], product_type.clone())?;
 
         if products_response.products.is_empty() {
-            return Err(std::io::Error::other("Product not found").into());
+            return Err(crate::Error::PluginInvoke(
+                PluginInvokeError::InvokeRejected(ErrorResponse {
+                    code: Some("productNotFound".to_string()),
+                    message: Some("Product not found".to_string()),
+                    data: (),
+                }),
+            ));
         }
+
+        let product = &products_response.products[0];
+        let product_title = product.title.clone();
 
         let store_id = HSTRING::from(&product_id);
 
@@ -264,14 +313,12 @@ impl<R: Runtime> Iap<R> {
 
             context
                 .RequestPurchaseWithPurchasePropertiesAsync(&store_id, &properties)
-                .and_then(|async_op| async_op.get())
-                .map_err(|e| std::io::Error::other(format!("Purchase request failed: {:?}", e)))?
+                .and_then(|async_op| async_op.get())?
         } else {
             // Simple purchase without properties
             context
                 .RequestPurchaseAsync(&store_id)
-                .and_then(|async_op| async_op.get())
-                .map_err(|e| std::io::Error::other(format!("Purchase request failed: {:?}", e)))?
+                .and_then(|async_op| async_op.get())?
         };
 
         // Check purchase status
@@ -280,14 +327,42 @@ impl<R: Runtime> Iap<R> {
         let purchase_state = match status {
             StorePurchaseStatus::Succeeded => PurchaseStateValue::Purchased as i32,
             StorePurchaseStatus::AlreadyPurchased => PurchaseStateValue::Purchased as i32,
-            StorePurchaseStatus::NotPurchased => PurchaseStateValue::Canceled as i32,
+            StorePurchaseStatus::NotPurchased => {
+                return Err(crate::Error::PluginInvoke(
+                    PluginInvokeError::InvokeRejected(ErrorResponse {
+                        code: Some("purchaseNotCompleted".to_string()),
+                        message: Some("Purchase was not completed".to_string()),
+                        data: (),
+                    }),
+                ));
+            }
             StorePurchaseStatus::NetworkError => {
-                return Err(std::io::Error::other("Network error during purchase").into());
+                return Err(crate::Error::PluginInvoke(
+                    PluginInvokeError::InvokeRejected(ErrorResponse {
+                        code: Some("networkError".to_string()),
+                        message: Some("Network error during purchase".to_string()),
+                        data: (),
+                    }),
+                ));
             }
             StorePurchaseStatus::ServerError => {
-                return Err(std::io::Error::other("Server error during purchase").into());
+                return Err(crate::Error::PluginInvoke(
+                    PluginInvokeError::InvokeRejected(ErrorResponse {
+                        code: Some("serverError".to_string()),
+                        message: Some("Server error during purchase".to_string()),
+                        data: (),
+                    }),
+                ));
             }
-            _ => return Err(std::io::Error::other("Purchase failed").into()),
+            _ => {
+                return Err(crate::Error::PluginInvoke(
+                    PluginInvokeError::InvokeRejected(ErrorResponse {
+                        code: Some("purchaseFailed".to_string()),
+                        message: Some("Purchase failed".to_string()),
+                        data: (),
+                    }),
+                ));
+            }
         };
 
         // Get extended error info if available
@@ -301,14 +376,20 @@ impl<R: Runtime> Iap<R> {
         // Generate purchase details
         let purchase_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .map_err(|e| {
+                crate::Error::PluginInvoke(PluginInvokeError::InvokeRejected(ErrorResponse {
+                    code: Some("systemTimeError".to_string()),
+                    message: Some(format!("Failed to get system time: {:?}", e)),
+                    data: (),
+                }))
+            })?
             .as_millis() as i64;
 
         let purchase_token = format!("win_{}_{}", product_id, purchase_time);
 
         Ok(Purchase {
             order_id: Some(purchase_token.clone()),
-            package_name: self.app_handle.package_info().name.clone(),
+            package_name: product_title,
             product_id: product_id.clone(),
             purchase_time,
             purchase_token: purchase_token.clone(),
@@ -332,8 +413,7 @@ impl<R: Runtime> Iap<R> {
         // Get app license info
         let app_license = context
             .GetAppLicenseAsync()
-            .and_then(|async_op| async_op.get())
-            .map_err(|e| std::io::Error::other(format!("Failed to get app license: {:?}", e)))?;
+            .and_then(|async_op| async_op.get())?;
 
         let mut purchases = Vec::new();
 
@@ -377,7 +457,13 @@ impl<R: Runtime> Iap<R> {
         } else {
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .map_err(|e| {
+                    crate::Error::PluginInvoke(PluginInvokeError::InvokeRejected(ErrorResponse {
+                        code: Some("systemTimeError".to_string()),
+                        message: Some(format!("Failed to get system time: {:?}", e)),
+                        data: (),
+                    }))
+                })?
                 .as_millis() as i64
         };
 
@@ -423,8 +509,7 @@ impl<R: Runtime> Iap<R> {
         // Get app license to check ownership
         let app_license = context
             .GetAppLicenseAsync()
-            .and_then(|async_op| async_op.get())
-            .map_err(|e| std::io::Error::other(format!("Failed to get app license: {:?}", e)))?;
+            .and_then(|async_op| async_op.get())?;
 
         let addon_licenses = app_license.AddOnLicenses()?;
 
