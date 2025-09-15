@@ -58,7 +58,7 @@ pub enum Error {
     PluginInvoke(#[from] crate::error::PluginInvokeError),
     #[cfg(target_os = "windows")]
     #[error(transparent)]
-    WindowsApi(#[from] windows_result::Error),
+    WindowsApi(#[from] windows::core::Error),
 }
 
 impl Serialize for Error {
