@@ -2,7 +2,6 @@ import Tauri
 import UIKit
 import WebKit
 import StoreKit
-import Foundation
 
 class InitializeArgs: Decodable {}
 
@@ -40,41 +39,29 @@ enum PurchaseStateValue: Int {
 }
 
 @available(iOS 15.0, *)
-@MainActor
 class IapPlugin: Plugin {
-    private var updateListenerTask: Task<Void, Never>?
-    private var activeTasks: Set<Task<Void, Never>> = []
-        
+    
     public override func load(webview: WKWebView) {
         super.load(webview: webview)
-
-        // Start listening for transaction updates
-        updateListenerTask = Task { [weak self] in
-            guard let self = self else { return }
-            
-            do {
-                for await update in Transaction.updates {
-                    // Check if task is cancelled
-                    try Task.checkCancellation()
-                    
-                    await self.handleTransactionUpdate(update)
-                }
-            } catch {
-                // Task was cancelled or error occurred
-                print("Transaction listener task ended: \(error)")
-            }
-        }
+        
+        // Listen for StoreKit notifications instead of Task
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleStoreKitNotification),
+            name: .storeKitTransactionUpdated,
+            object: nil
+        )
     }
     
     deinit {
-        updateListenerTask?.cancel()
-        updateListenerTask = nil
-        
-        // Cancel all active tasks
-        for task in activeTasks {
-            task.cancel()
-        }
-        activeTasks.removeAll()
+        NotificationCenter.default.removeObserver(self)
+    }
+    
+    @objc private func handleStoreKitNotification(_ notification: Notification) {
+        // Handle transaction updates when they occur
+        // This will be called when StoreKit sends notifications
+        // We'll handle transactions in the individual methods instead
+        print("StoreKit transaction notification received")
     }
     
     @objc public func initialize(_ invoke: Invoke) throws {
@@ -83,45 +70,17 @@ class IapPlugin: Plugin {
     }
     
     @objc public func getProducts(_ invoke: Invoke) throws {
-        let task = Task { [weak self] in
-            guard let self = self else { return }
-            
-            do {
-                try Task.checkCancellation()
-                try await self.getProducts(invoke)
-            } catch is CancellationError {
-                // Task was cancelled - don't call invoke methods
-                print("GetProducts task cancelled")
-            } catch {
-                await MainActor.run {
-                    invoke.reject("Failed to get products: \(error.localizedDescription)")
-                }
-            }
-        }
-        
-        // Track the task for cleanup
-        activeTasks.insert(task)
-        
-        // Remove task when completed
-        Task {
-            await task.value
-            await MainActor.run {
-                self.activeTasks.remove(task)
-            }
-        }
+        try await self.getProducts(invoke)
     }
 
     public func getProducts(_ invoke: Invoke) async throws {
         let args = try invoke.parseArgs(GetProductsArgs.self)
         
         do {
-            try Task.checkCancellation()
             let products = try await Product.products(for: args.productIds)
             var productsArray: [[String: Any]] = []
             
             for product in products {
-                try Task.checkCancellation()
-                
                 var productDict: [String: Any] = [
                     "productId": product.id,
                     "title": product.displayName,
@@ -182,57 +141,23 @@ class IapPlugin: Plugin {
                 productsArray.append(productDict)
             }
             
-            await MainActor.run {
-                invoke.resolve(["products": productsArray])
-            }
-        } catch is CancellationError {
-            throw error
+            invoke.resolve(["products": productsArray])
         } catch {
-            await MainActor.run {
-                invoke.reject("Failed to fetch products: \(error.localizedDescription)")
-            }
+            invoke.reject("Failed to fetch products: \(error.localizedDescription)")
         }
     }
     
     @objc public func purchase(_ invoke: Invoke) throws {
-        let task = Task { [weak self] in
-            guard let self = self else { return }
-            
-            do {
-                try Task.checkCancellation()
-                try await self.purchase(invoke)
-            } catch is CancellationError {
-                // Task was cancelled - don't call invoke methods
-                print("Purchase task cancelled")
-            } catch {
-                await MainActor.run {
-                    invoke.reject("Purchase failed: \(error.localizedDescription)")
-                }
-            }
-        }
-        
-        // Track the task for cleanup
-        activeTasks.insert(task)
-        
-        // Remove task when completed
-        Task {
-            await task.value
-            await MainActor.run {
-                self.activeTasks.remove(task)
-            }
-        }
+        try await self.purchase(invoke)
     }
 
     public func purchase(_ invoke: Invoke) async throws {
         let args = try invoke.parseArgs(PurchaseArgs.self)
         
         do {
-            try Task.checkCancellation()
             let products = try await Product.products(for: [args.productId])
             guard let product = products.first else {
-                await MainActor.run {
-                    invoke.reject("Product not found")
-                }
+                invoke.reject("Product not found")
                 return
             }
             
@@ -242,15 +167,11 @@ class IapPlugin: Plugin {
             // Add appAccountToken if provided (must be a valid UUID)
             if let appAccountToken = args.appAccountToken {
                 guard let uuid = UUID(uuidString: appAccountToken) else {
-                    await MainActor.run {
-                        invoke.reject("Invalid appAccountToken: must be a valid UUID string")
-                    }
+                    invoke.reject("Invalid appAccountToken: must be a valid UUID string")
                     return
                 }
                 purchaseOptions.insert(.appAccountToken(uuid))
             }
-            
-            try Task.checkCancellation()
             
             // Initiate purchase with options
             let result = purchaseOptions.isEmpty 
@@ -265,67 +186,32 @@ class IapPlugin: Plugin {
                     await transaction.finish()
                     
                     let purchase = await createPurchaseObject(from: transaction, product: product)
-                    await MainActor.run {
-                        invoke.resolve(purchase)
-                    }
+                    
+                    // Emit purchase updated event
+                    trigger("purchaseUpdated", data: purchase as! JSObject)
+                    
+                    invoke.resolve(purchase)
                     
                 case .unverified(_, _):
-                    await MainActor.run {
-                        invoke.reject("Transaction verification failed")
-                    }
+                    invoke.reject("Transaction verification failed")
                 }
                 
             case .userCancelled:
-                await MainActor.run {
-                    invoke.reject("Purchase cancelled by user")
-                }
+                invoke.reject("Purchase cancelled by user")
                 
             case .pending:
-                await MainActor.run {
-                    invoke.reject("Purchase is pending")
-                }
+                invoke.reject("Purchase is pending")
                 
             @unknown default:
-                await MainActor.run {
-                    invoke.reject("Unknown purchase result")
-                }
+                invoke.reject("Unknown purchase result")
             }
-        } catch is CancellationError {
-            throw error
         } catch {
-            await MainActor.run {
-                invoke.reject("Purchase failed: \(error.localizedDescription)")
-            }
+            invoke.reject("Purchase failed: \(error.localizedDescription)")
         }
     }
     
     @objc public func restorePurchases(_ invoke: Invoke) throws {
-        let task = Task { [weak self] in
-            guard let self = self else { return }
-            
-            do {
-                try Task.checkCancellation()
-                try await self.restorePurchases(invoke)
-            } catch is CancellationError {
-                // Task was cancelled - don't call invoke methods
-                print("RestorePurchases task cancelled")
-            } catch {
-                await MainActor.run {
-                    invoke.reject("Failed to restore purchases: \(error.localizedDescription)")
-                }
-            }
-        }
-        
-        // Track the task for cleanup
-        activeTasks.insert(task)
-        
-        // Remove task when completed
-        Task {
-            await task.value
-            await MainActor.run {
-                self.activeTasks.remove(task)
-            }
-        }
+        try await self.restorePurchases(invoke)
     }
 
     public func restorePurchases(_ invoke: Invoke) async throws {
@@ -335,8 +221,6 @@ class IapPlugin: Plugin {
         do {
             // Get all current entitlements
             for await result in Transaction.currentEntitlements {
-                try Task.checkCancellation()
-                
                 switch result {
                 case .verified(let transaction):
                     if let product = try? await Product.products(for: [transaction.productID]).first {
@@ -368,45 +252,14 @@ class IapPlugin: Plugin {
                 }
             }
             
-            await MainActor.run {
-                invoke.resolve(["purchases": purchases])
-            }
-        } catch is CancellationError {
-            throw error
+            invoke.resolve(["purchases": purchases])
         } catch {
-            await MainActor.run {
-                invoke.reject("Failed to restore purchases: \(error.localizedDescription)")
-            }
+            invoke.reject("Failed to restore purchases: \(error.localizedDescription)")
         }
     }
 
     @objc public func getPurchaseHistory(_ invoke: Invoke) throws {
-        let task = Task { [weak self] in
-            guard let self = self else { return }
-            
-            do {
-                try Task.checkCancellation()
-                try await self.getPurchaseHistory(invoke)
-            } catch is CancellationError {
-                // Task was cancelled - don't call invoke methods
-                print("GetPurchaseHistory task cancelled")
-            } catch {
-                await MainActor.run {
-                    invoke.reject("Failed to get purchase history: \(error.localizedDescription)")
-                }
-            }
-        }
-        
-        // Track the task for cleanup
-        activeTasks.insert(task)
-        
-        // Remove task when completed
-        Task {
-            await task.value
-            await MainActor.run {
-                self.activeTasks.remove(task)
-            }
-        }
+        try await self.getPurchaseHistory(invoke)
     }
 
     public func getPurchaseHistory(_ invoke: Invoke) async throws {
@@ -415,8 +268,6 @@ class IapPlugin: Plugin {
         do {
             // Get all transactions (including expired ones)
             for await result in Transaction.all {
-                try Task.checkCancellation()
-                
                 switch result {
                 case .verified(let transaction):
                     let record: [String: Any] = [
@@ -433,15 +284,9 @@ class IapPlugin: Plugin {
                 }
             }
             
-            await MainActor.run {
-                invoke.resolve(["history": history])
-            }
-        } catch is CancellationError {
-            throw error
+            invoke.resolve(["history": history])
         } catch {
-            await MainActor.run {
-                invoke.reject("Failed to get purchase history: \(error.localizedDescription)")
-            }
+            invoke.reject("Failed to get purchase history: \(error.localizedDescription)")
         }
     }
     
@@ -451,32 +296,7 @@ class IapPlugin: Plugin {
     }
     
     @objc public func getProductStatus(_ invoke: Invoke) throws {
-        let task = Task { [weak self] in
-            guard let self = self else { return }
-            
-            do {
-                try Task.checkCancellation()
-                try await self.getProductStatus(invoke)
-            } catch is CancellationError {
-                // Task was cancelled - don't call invoke methods
-                print("GetProductStatus task cancelled")
-            } catch {
-                await MainActor.run {
-                    invoke.reject("Failed to get product status: \(error.localizedDescription)")
-                }
-            }
-        }
-        
-        // Track the task for cleanup
-        activeTasks.insert(task)
-        
-        // Remove task when completed
-        Task {
-            await task.value
-            await MainActor.run {
-                self.activeTasks.remove(task)
-            }
-        }
+        try await self.getProductStatus(invoke)
     }
 
     public func getProductStatus(_ invoke: Invoke) async throws {
@@ -487,120 +307,68 @@ class IapPlugin: Plugin {
             "isOwned": false
         ]
         
-        do {
-            // Check current entitlements for the specific product
-            for await result in Transaction.currentEntitlements {
-                try Task.checkCancellation()
-                
-                switch result {
-                case .verified(let transaction):
-                    if transaction.productID == args.productId {
-                        statusResult["isOwned"] = true
-                        statusResult["purchaseTime"] = Int(transaction.purchaseDate.timeIntervalSince1970 * 1000)
-                        statusResult["purchaseToken"] = String(transaction.id)
-                        statusResult["isAcknowledged"] = true  // Always true on iOS
-                        
-                        // Check if expired/revoked
-                        if let revocationDate = transaction.revocationDate {
+        // Check current entitlements for the specific product
+        for await result in Transaction.currentEntitlements {
+            switch result {
+            case .verified(let transaction):
+                if transaction.productID == args.productId {
+                    statusResult["isOwned"] = true
+                    statusResult["purchaseTime"] = Int(transaction.purchaseDate.timeIntervalSince1970 * 1000)
+                    statusResult["purchaseToken"] = String(transaction.id)
+                    statusResult["isAcknowledged"] = true  // Always true on iOS
+                    
+                    // Check if expired/revoked
+                    if let revocationDate = transaction.revocationDate {
+                        statusResult["purchaseState"] = PurchaseStateValue.canceled.rawValue
+                        statusResult["isOwned"] = false
+                        statusResult["expirationTime"] = Int(revocationDate.timeIntervalSince1970 * 1000)
+                    } else if let expirationDate = transaction.expirationDate {
+                        if expirationDate < Date() {
                             statusResult["purchaseState"] = PurchaseStateValue.canceled.rawValue
                             statusResult["isOwned"] = false
-                            statusResult["expirationTime"] = Int(revocationDate.timeIntervalSince1970 * 1000)
-                        } else if let expirationDate = transaction.expirationDate {
-                            if expirationDate < Date() {
-                                statusResult["purchaseState"] = PurchaseStateValue.canceled.rawValue
-                                statusResult["isOwned"] = false
-                            } else {
-                                statusResult["purchaseState"] = PurchaseStateValue.purchased.rawValue
-                            }
-                            statusResult["expirationTime"] = Int(expirationDate.timeIntervalSince1970 * 1000)
                         } else {
                             statusResult["purchaseState"] = PurchaseStateValue.purchased.rawValue
                         }
-                        
-                        // Check subscription renewal status if it's a subscription
-                        if let product = try? await Product.products(for: [args.productId]).first {
-                            if product.type == .autoRenewable {
-                                // Check subscription status
-                                if let statuses = try? await product.subscription?.status {
-                                    for status in statuses {
-                                        if status.state == .subscribed {
-                                            statusResult["isAutoRenewing"] = true
-                                        } else if status.state == .expired {
-                                            statusResult["isAutoRenewing"] = false
-                                            statusResult["purchaseState"] = PurchaseStateValue.canceled.rawValue
-                                            statusResult["isOwned"] = false
-                                        } else if status.state == .inGracePeriod {
-                                            statusResult["isAutoRenewing"] = true
-                                            statusResult["purchaseState"] = PurchaseStateValue.purchased.rawValue
-                                        } else {
-                                            statusResult["isAutoRenewing"] = false
-                                        }
-                                        break
-                                    }
-                                }
-                            }
-                        }
-                        
-                        break
+                        statusResult["expirationTime"] = Int(expirationDate.timeIntervalSince1970 * 1000)
+                    } else {
+                        statusResult["purchaseState"] = PurchaseStateValue.purchased.rawValue
                     }
-                case .unverified(_, _):
-                    // Skip unverified transactions
-                    continue
-                }
-            }
-            
-            await MainActor.run {
-                invoke.resolve(statusResult)
-            }
-        } catch is CancellationError {
-            throw error
-        } catch {
-            await MainActor.run {
-                invoke.reject("Failed to get product status: \(error.localizedDescription)")
-            }
-        }
-    }
-    
-    private func handleTransactionUpdate(_ result: VerificationResult<Transaction>) async {
-        do {
-            try Task.checkCancellation()
-            
-            switch result {
-            case .verified(let transaction):
-                do {
-                    // Get product details
-                    let products = try await Product.products(for: [transaction.productID])
-                    if let product = products.first {
-                        let purchase = await createPurchaseObject(from: transaction, product: product)
-                        
-                        // Safely convert to JSObject-compatible format
-                        if let jsObject = purchase as? JSObject {
-                            await MainActor.run {
-                                self.trigger("purchaseUpdated", data: jsObject)
+                    
+                    // Check subscription renewal status if it's a subscription
+                    if let product = try? await Product.products(for: [args.productId]).first {
+                        if product.type == .autoRenewable {
+                            // Check subscription status
+                            if let statuses = try? await product.subscription?.status {
+                                for status in statuses {
+                                    if status.state == .subscribed {
+                                        statusResult["isAutoRenewing"] = true
+                                    } else if status.state == .expired {
+                                        statusResult["isAutoRenewing"] = false
+                                        statusResult["purchaseState"] = PurchaseStateValue.canceled.rawValue
+                                        statusResult["isOwned"] = false
+                                    } else if status.state == .inGracePeriod {
+                                        statusResult["isAutoRenewing"] = true
+                                        statusResult["purchaseState"] = PurchaseStateValue.purchased.rawValue
+                                    } else {
+                                        statusResult["isAutoRenewing"] = false
+                                    }
+                                    break
+                                }
                             }
                         }
                     }
                     
-                    // Always finish transactions
-                    await transaction.finish()
-                } catch {
-                    print("Error handling transaction update: \(error)")
-                    // Still finish the transaction even if there's an error
-                    await transaction.finish()
+                    break
                 }
-                
             case .unverified(_, _):
-                // Handle unverified transaction
-                print("Received unverified transaction")
-                break
+                // Skip unverified transactions
+                continue
             }
-        } catch is CancellationError {
-            // Task was cancelled - this is expected
-            print("Transaction update handler cancelled")
-        } catch {
-            print("Error in transaction update handler: \(error)")
         }
+        
+        invoke.resolve(statusResult)
     }
+    
     
     private func createPurchaseObject(from transaction: Transaction, product: Product) async -> [String: Any] {
         var isAutoRenewing = false
