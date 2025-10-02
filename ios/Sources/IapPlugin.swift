@@ -2,6 +2,7 @@ import Tauri
 import UIKit
 import WebKit
 import StoreKit
+import Foundation
 
 class InitializeArgs: Decodable {}
 
@@ -40,13 +41,15 @@ enum PurchaseStateValue: Int {
 
 @available(iOS 15.0, *)
 class IapPlugin: Plugin {
-    private var updateListenerTask: Task<Void, Error>?
+    private var updateListenerTask: Task<Void, Never>?  // ✅ Task sẽ hoạt động
     
     public override func load(webview: WKWebView) {
         super.load(webview: webview)
 
         // Start listening for transaction updates
-        updateListenerTask = Task {
+        updateListenerTask = Task { [weak self] in  // ✅ Task sẽ hoạt động
+            guard let self = self else { return }
+            
             for await update in Transaction.updates {
                 await self.handleTransactionUpdate(update)
             }
