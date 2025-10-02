@@ -48,21 +48,21 @@ class IapPlugin: Plugin {
         super.load(webview: webview)
 
         // Start listening for transaction updates
-        updateListenerTask = Task { [weak self] in
-            guard let self = self else { return }
+        // updateListenerTask = Task { [weak self] in
+        //     guard let self = self else { return }
             
-            do {
-                for await update in Transaction.updates {
-                    // Check if task is cancelled
-                    try Task.checkCancellation()
+        //     do {
+        //         for await update in Transaction.updates {
+        //             // Check if task is cancelled
+        //             try Task.checkCancellation()
                     
-                    await self.handleTransactionUpdate(update)
-                }
-            } catch {
-                // Task was cancelled or error occurred
-                print("Transaction listener task ended: \(error)")
-            }
-        }
+        //             await self.handleTransactionUpdate(update)
+        //         }
+        //     } catch {
+        //         // Task was cancelled or error occurred
+        //         print("Transaction listener task ended: \(error)")
+        //     }
+        // }
     }
     
     deinit {
