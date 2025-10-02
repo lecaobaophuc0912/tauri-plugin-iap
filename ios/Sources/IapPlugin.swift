@@ -41,23 +41,33 @@ enum PurchaseStateValue: Int {
 
 @available(iOS 15.0, *)
 class IapPlugin: Plugin {
-    private var updateListenerTask: Task<Void, Never>?  // ✅ Task sẽ hoạt động
+    private var updateListenerTask: Task<Void, Never>?
+    private let taskQueue = DispatchQueue(label: "com.iap.task", qos: .userInitiated)
     
     public override func load(webview: WKWebView) {
         super.load(webview: webview)
 
         // Start listening for transaction updates
-        updateListenerTask = Task { [weak self] in  // ✅ Task sẽ hoạt động
+        updateListenerTask = Task { [weak self] in
             guard let self = self else { return }
             
-            for await update in Transaction.updates {
-                await self.handleTransactionUpdate(update)
+            do {
+                for await update in Transaction.updates {
+                    // Check if task is cancelled
+                    try Task.checkCancellation()
+                    
+                    await self.handleTransactionUpdate(update)
+                }
+            } catch {
+                // Task was cancelled or error occurred
+                print("Transaction listener task ended: \(error)")
             }
         }
     }
     
     deinit {
         updateListenerTask?.cancel()
+        updateListenerTask = nil
     }
     
     @objc public func initialize(_ invoke: Invoke) throws {
@@ -66,8 +76,13 @@ class IapPlugin: Plugin {
     }
     
     @objc public func getProducts(_ invoke: Invoke) throws {
-        Task {
-            try await self.getProducts(invoke)
+        Task { [weak self] in
+            guard let self = self else { return }
+            do {
+                try await self.getProducts(invoke)
+            } catch {
+                invoke.reject("Failed to get products: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -146,8 +161,13 @@ class IapPlugin: Plugin {
     }
     
     @objc public func purchase(_ invoke: Invoke) throws {
-        Task {
-            try await self.purchase(invoke)
+        Task { [weak self] in
+            guard let self = self else { return }
+            do {
+                try await self.purchase(invoke)
+            } catch {
+                invoke.reject("Purchase failed: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -207,8 +227,13 @@ class IapPlugin: Plugin {
     }
     
     @objc public func restorePurchases(_ invoke: Invoke) throws {
-        Task {
-            try await self.restorePurchases(invoke)
+        Task { [weak self] in
+            guard let self = self else { return }
+            do {
+                try await self.restorePurchases(invoke)
+            } catch {
+                invoke.reject("Failed to restore purchases: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -257,8 +282,13 @@ class IapPlugin: Plugin {
     }
 
     @objc public func getPurchaseHistory(_ invoke: Invoke) throws {
-        Task {
-            try await self.getPurchaseHistory(invoke)
+        Task { [weak self] in
+            guard let self = self else { return }
+            do {
+                try await self.getPurchaseHistory(invoke)
+            } catch {
+                invoke.reject("Failed to get purchase history: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -296,8 +326,13 @@ class IapPlugin: Plugin {
     }
     
     @objc public func getProductStatus(_ invoke: Invoke) throws {
-        Task {
-            try await self.getProductStatus(invoke)
+        Task { [weak self] in
+            guard let self = self else { return }
+            do {
+                try await self.getProductStatus(invoke)
+            } catch {
+                invoke.reject("Failed to get product status: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -374,19 +409,29 @@ class IapPlugin: Plugin {
     private func handleTransactionUpdate(_ result: VerificationResult<Transaction>) async {
         switch result {
         case .verified(let transaction):
-            // Get product details
-            if let product = try? await Product.products(for: [transaction.productID]).first {
-                let purchase = await createPurchaseObject(from: transaction, product: product)
+            do {
+                // Get product details
+                let products = try await Product.products(for: [transaction.productID])
+                if let product = products.first {
+                    let purchase = await createPurchaseObject(from: transaction, product: product)
+                    
+                    // Safely convert to JSObject-compatible format
+                    if let jsObject = purchase as? JSObject {
+                        trigger("purchaseUpdated", data: jsObject)
+                    }
+                }
                 
-                // Emit event - convert to JSObject-compatible format
-                trigger("purchaseUpdated", data: purchase as! JSObject)
+                // Always finish transactions
+                await transaction.finish()
+            } catch {
+                print("Error handling transaction update: \(error)")
+                // Still finish the transaction even if there's an error
+                await transaction.finish()
             }
-            
-            // Always finish transactions
-            await transaction.finish()
             
         case .unverified(_, _):
             // Handle unverified transaction
+            print("Received unverified transaction")
             break
         }
     }
