@@ -42,8 +42,7 @@ enum PurchaseStateValue: Int {
 @available(iOS 15.0, *)
 class IapPlugin: Plugin {
     private var updateListenerTask: Task<Void, Never>?
-    private let taskQueue = DispatchQueue(label: "com.iap.task", qos: .userInitiated)
-    
+        
     public override func load(webview: WKWebView) {
         super.load(webview: webview)
 
