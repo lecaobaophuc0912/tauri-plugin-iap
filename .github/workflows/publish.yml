@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   publish-npm:
-    name: Publish to npm (pnpm)
+    name: Publish to npm
     runs-on: ubuntu-latest
     needs: publish-crate
     if: ${{ startsWith(github.ref, 'refs/tags/v') }}
@@ -26,20 +26,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      # pnpm
-      - uses: pnpm/action-setup@v4
-        with:
-          run_install: false
-
       # Node + registry auth
       - uses: actions/setup-node@v5
         with:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
-          cache: "pnpm"
+          cache: "npm"
 
       # Install dependencies
-      - run: pnpm install
+      - run: npm install
 
       # Ensure the tag matches package.json version
       - name: Verify version matches tag
@@ -49,14 +44,14 @@ jobs:
           test "$PKG_VERSION" = "$TAG_VERSION" || (echo "Tag $TAG_VERSION != package.json $PKG_VERSION" && exit 1)
 
       # Publish
-      - name: pnpm publish
+      - name: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           # If you want supply-chain provenance (npm >=9.5, Node >=20)
           npm config set provenance true
           # Public package:
-          pnpm publish --access public --no-git-checks
+          npm publish --access public
 
   publish-crate:
     name: Publish to crates.io (cargo)

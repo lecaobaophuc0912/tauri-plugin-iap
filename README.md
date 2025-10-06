@@ -38,8 +38,6 @@ Install the JavaScript package:
 npm install @choochmeque/tauri-plugin-iap-api
 # or
 yarn add @choochmeque/tauri-plugin-iap-api
-# or
-pnpm add @choochmeque/tauri-plugin-iap-api
 ```
 
 Add the plugin to your Tauri project's `Cargo.toml`:
