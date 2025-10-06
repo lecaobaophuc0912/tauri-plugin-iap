@@ -39,21 +39,30 @@ enum PurchaseStateValue: Int {
     case pending = 2
 }
 
-class IapPlugin: Plugin, SKProductsRequestDelegate, SKPaymentTransactionObserver {
-    private var productsRequest: SKProductsRequest?
-    private var pendingInvoke: Invoke?
-    private var isPurchaseRequest: Bool = false
-    private var currentAppAccountToken: String?
+@available(iOS 15.0, *)
+class IapPlugin: Plugin {
     
-    public override init() {
-        super.init()
+    public override func load(webview: WKWebView) {
+        super.load(webview: webview)
         
-        // Add as transaction observer
-        SKPaymentQueue.default().add(self)
+        // Listen for StoreKit notifications instead of Task
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleStoreKitNotification),
+            name: .storeKitTransactionUpdated,
+            object: nil
+        )
     }
     
     deinit {
-        SKPaymentQueue.default().remove(self)
+        NotificationCenter.default.removeObserver(self)
+    }
+    
+    @objc private func handleStoreKitNotification(_ notification: Notification) {
+        // Handle transaction updates when they occur
+        // This will be called when StoreKit sends notifications
+        // We'll handle transactions in the individual methods instead
+        print("StoreKit transaction notification received")
     }
     
     @objc public func initialize(_ invoke: Invoke) throws {
@@ -62,6 +71,10 @@ class IapPlugin: Plugin, SKProductsRequestDelegate, SKPaymentTransactionObserver
     }
     
     @objc public func getProducts(_ invoke: Invoke) throws {
+        try await self.getProducts(invoke)
+    }
+
+    public func getProducts(_ invoke: Invoke) async throws {
         let args = try invoke.parseArgs(GetProductsArgs.self)
         
         // Store the invoke for later use
@@ -76,34 +89,146 @@ class IapPlugin: Plugin, SKProductsRequestDelegate, SKPaymentTransactionObserver
     }
     
     @objc public func purchase(_ invoke: Invoke) throws {
+        try await self.purchase(invoke)
+    }
+
+    public func purchase(_ invoke: Invoke) async throws {
         let args = try invoke.parseArgs(PurchaseArgs.self)
         
-        // Store the invoke for later use
-        self.pendingInvoke = invoke
-        self.isPurchaseRequest = true
-        
-        // Store appAccountToken for later use
-        self.currentAppAccountToken = args.appAccountToken
-        
-        // First, we need to get the product to create a proper payment
-        let productIdentifiers = Set([args.productId])
-        self.productsRequest = SKProductsRequest(productIdentifiers: productIdentifiers)
-        self.productsRequest?.delegate = self
-        self.productsRequest?.start()
+        do {
+            let products = try await Product.products(for: [args.productId])
+            guard let product = products.first else {
+                invoke.reject("Product not found")
+                return
+            }
+            
+            // Prepare purchase options
+            var purchaseOptions: Set<Product.PurchaseOption> = []
+            
+            // Add appAccountToken if provided (must be a valid UUID)
+            if let appAccountToken = args.appAccountToken {
+                guard let uuid = UUID(uuidString: appAccountToken) else {
+                    invoke.reject("Invalid appAccountToken: must be a valid UUID string")
+                    return
+                }
+                purchaseOptions.insert(.appAccountToken(uuid))
+            }
+            
+            // Initiate purchase with options
+            let result = purchaseOptions.isEmpty 
+                ? try await product.purchase()
+                : try await product.purchase(options: purchaseOptions)
+            
+            switch result {
+            case .success(let verification):
+                switch verification {
+                case .verified(let transaction):
+                    // Finish the transaction
+                    await transaction.finish()
+                    
+                    let purchase = await createPurchaseObject(from: transaction, product: product)
+                    
+                    // Emit purchase updated event
+                    trigger("purchaseUpdated", data: purchase as! JSObject)
+                    
+                    invoke.resolve(purchase)
+                    
+                case .unverified(_, _):
+                    invoke.reject("Transaction verification failed")
+                }
+                
+            case .userCancelled:
+                invoke.reject("Purchase cancelled by user")
+                
+            case .pending:
+                invoke.reject("Purchase is pending")
+                
+            @unknown default:
+                invoke.reject("Unknown purchase result")
+            }
+        } catch {
+            invoke.reject("Purchase failed: \(error.localizedDescription)")
+        }
     }
     
     @objc public func restorePurchases(_ invoke: Invoke) throws {
-        // Store the invoke for later use
-        self.pendingInvoke = invoke
+        try await self.restorePurchases(invoke)
+    }
+
+    public func restorePurchases(_ invoke: Invoke) async throws {
+        let args = try? invoke.parseArgs(RestorePurchasesArgs.self)
+        var purchases: [[String: Any]] = []
         
-        // Restore completed transactions
-        SKPaymentQueue.default().restoreCompletedTransactions()
+        do {
+            // Get all current entitlements
+            for await result in Transaction.currentEntitlements {
+                switch result {
+                case .verified(let transaction):
+                    if let product = try? await Product.products(for: [transaction.productID]).first {
+                        // Filter by product type if specified
+                        if let requestedType = args?.productType {
+                            let productTypeMatches: Bool
+                            switch requestedType {
+                            case "subs":
+                                productTypeMatches = (product.type == .autoRenewable || product.type == .nonRenewable)
+                            case "inapp":
+                                productTypeMatches = (product.type == .consumable || product.type == .nonConsumable)
+                            default:
+                                productTypeMatches = true
+                            }
+                            
+                            if productTypeMatches {
+                                let purchase = await createPurchaseObject(from: transaction, product: product)
+                                purchases.append(purchase)
+                            }
+                        } else {
+                            // No filter, include all
+                            let purchase = await createPurchaseObject(from: transaction, product: product)
+                            purchases.append(purchase)
+                        }
+                    }
+                case .unverified(_, _):
+                    // Skip unverified transactions
+                    continue
+                }
+            }
+            
+            invoke.resolve(["purchases": purchases])
+        } catch {
+            invoke.reject("Failed to restore purchases: \(error.localizedDescription)")
+        }
     }
 
     @objc public func getPurchaseHistory(_ invoke: Invoke) throws {
-        // StoreKit 1 doesn't provide direct access to purchase history
-        // This would typically be handled server-side
-        invoke.resolve(["history": []])
+        try await self.getPurchaseHistory(invoke)
+    }
+
+    public func getPurchaseHistory(_ invoke: Invoke) async throws {
+        var history: [[String: Any]] = []
+        
+        do {
+            // Get all transactions (including expired ones)
+            for await result in Transaction.all {
+                switch result {
+                case .verified(let transaction):
+                    let record: [String: Any] = [
+                        "productId": transaction.productID,
+                        "purchaseTime": Int(transaction.purchaseDate.timeIntervalSince1970 * 1000),
+                        "purchaseToken": String(transaction.id),
+                        "quantity": transaction.purchasedQuantity,
+                        "originalJson": "",  // Not available in StoreKit 2
+                        "signature": ""      // Not available in StoreKit 2
+                    ]
+                    history.append(record)
+                case .unverified(_, _):
+                    continue
+                }
+            }
+            
+            invoke.resolve(["history": history])
+        } catch {
+            invoke.reject("Failed to get purchase history: \(error.localizedDescription)")
+        }
     }
     
     @objc public func acknowledgePurchase(_ invoke: Invoke) throws {
@@ -112,177 +237,122 @@ class IapPlugin: Plugin, SKProductsRequestDelegate, SKPaymentTransactionObserver
     }
     
     @objc public func getProductStatus(_ invoke: Invoke) throws {
+        try await self.getProductStatus(invoke)
+    }
+
+    public func getProductStatus(_ invoke: Invoke) async throws {
         let args = try invoke.parseArgs(GetProductStatusArgs.self)
         
-        // Check if product is owned by checking receipt
-        let receiptURL = Bundle.main.appStoreReceiptURL
-        if let receiptData = try? Data(contentsOf: receiptURL!) {
-            // Parse receipt to check product ownership
-            // This is a simplified version - in practice you'd parse the receipt properly
-            let statusResult: [String: Any] = [
-                "productId": args.productId,
-                "isOwned": false, // Would be determined by receipt parsing
-                "isAcknowledged": true,
-                "purchaseState": PurchaseStateValue.purchased.rawValue
-            ]
-            invoke.resolve(statusResult)
-        } else {
-            let statusResult: [String: Any] = [
-                "productId": args.productId,
-                "isOwned": false,
-                "isAcknowledged": true,
-                "purchaseState": PurchaseStateValue.canceled.rawValue
-            ]
-            invoke.resolve(statusResult)
-        }
-    }
-    
-    // MARK: - SKProductsRequestDelegate
-    
-    func productsRequest(_ request: SKProductsRequest, didReceive response: SKProductsResponse) {
-        var productsArray: [[String: Any]] = []
+        var statusResult: [String: Any] = [
+            "productId": args.productId,
+            "isOwned": false
+        ]
         
-        for product in response.products {
-            var productDict: [String: Any] = [
-                "productId": product.productIdentifier,
-                "title": product.localizedTitle,
-                "description": product.localizedDescription,
-                "productType": "inapp" // StoreKit 1 doesn't distinguish between types
-            ]
-            
-            // Add pricing information
-            let formatter = NumberFormatter()
-            formatter.numberStyle = .currency
-            formatter.locale = product.priceLocale
-            productDict["formattedPrice"] = formatter.string(from: product.price)
-            productDict["priceCurrencyCode"] = product.priceLocale.currencyCode ?? ""
-            
-            productsArray.append(productDict)
-        }
-        
-        if let invoke = self.pendingInvoke {
-            // Check if this is a purchase request or getProducts request
-            if self.isPurchaseRequest && productsArray.count == 1 {
-                // This is a purchase request, initiate the payment
-                let product = response.products.first!
-                let payment = SKMutablePayment(product: product)
-                
-                // Add appAccountToken if provided
-                if let appAccountToken = self.currentAppAccountToken {
-                    payment.applicationUsername = appAccountToken
-                }
-                
-                SKPaymentQueue.default().add(payment)
-            } else {
-                // This is a getProducts request
-                invoke.resolve(["products": productsArray])
-                self.pendingInvoke = nil
-                self.isPurchaseRequest = false
-                self.currentAppAccountToken = nil
-            }
-        }
-    }
-    
-    func request(_ request: SKRequest, didFailWithError error: Error) {
-        if let invoke = self.pendingInvoke {
-            invoke.reject("Request failed: \(error.localizedDescription)")
-            self.pendingInvoke = nil
-            self.isPurchaseRequest = false
-            self.currentAppAccountToken = nil
-        }
-    }
-    
-    // MARK: - SKPaymentTransactionObserver
-    
-    func paymentQueue(_ queue: SKPaymentQueue, updatedTransactions transactions: [SKPaymentTransaction]) {
-        for transaction in transactions {
-            switch transaction.transactionState {
-            case .purchased:
-                // Handle successful purchase
-                let purchase = self.createPurchaseObject(from: transaction)
-                if let invoke = self.pendingInvoke {
-                    invoke.resolve(purchase)
-                    self.pendingInvoke = nil
-                    self.isPurchaseRequest = false
-                    self.currentAppAccountToken = nil
-                }
-                
-                // Emit event
-                self.trigger("purchaseUpdated", data: purchase as! JSObject)
-                
-                // Finish the transaction
-                SKPaymentQueue.default().finishTransaction(transaction)
-                
-            case .failed:
-                // Handle failed purchase
-                if let invoke = self.pendingInvoke {
-                    if let error = transaction.error as? SKError {
-                        switch error.code {
-                        case .paymentCancelled:
-                            invoke.reject("Purchase cancelled by user")
-                        default:
-                            invoke.reject("Purchase failed: \(error.localizedDescription)")
+        // Check current entitlements for the specific product
+        for await result in Transaction.currentEntitlements {
+            switch result {
+            case .verified(let transaction):
+                if transaction.productID == args.productId {
+                    statusResult["isOwned"] = true
+                    statusResult["purchaseTime"] = Int(transaction.purchaseDate.timeIntervalSince1970 * 1000)
+                    statusResult["purchaseToken"] = String(transaction.id)
+                    statusResult["isAcknowledged"] = true  // Always true on iOS
+                    
+                    // Check if expired/revoked
+                    if let revocationDate = transaction.revocationDate {
+                        statusResult["purchaseState"] = PurchaseStateValue.canceled.rawValue
+                        statusResult["isOwned"] = false
+                        statusResult["expirationTime"] = Int(revocationDate.timeIntervalSince1970 * 1000)
+                    } else if let expirationDate = transaction.expirationDate {
+                        if expirationDate < Date() {
+                            statusResult["purchaseState"] = PurchaseStateValue.canceled.rawValue
+                            statusResult["isOwned"] = false
+                        } else {
+                            statusResult["purchaseState"] = PurchaseStateValue.purchased.rawValue
                         }
+                        statusResult["expirationTime"] = Int(expirationDate.timeIntervalSince1970 * 1000)
                     } else {
-                        invoke.reject("Purchase failed")
+                        statusResult["purchaseState"] = PurchaseStateValue.purchased.rawValue
                     }
-                    self.pendingInvoke = nil
-                    self.isPurchaseRequest = false
-                    self.currentAppAccountToken = nil
+                    
+                    // Check subscription renewal status if it's a subscription
+                    if let product = try? await Product.products(for: [args.productId]).first {
+                        if product.type == .autoRenewable {
+                            // Check subscription status
+                            if let statuses = try? await product.subscription?.status {
+                                for status in statuses {
+                                    if status.state == .subscribed {
+                                        statusResult["isAutoRenewing"] = true
+                                    } else if status.state == .expired {
+                                        statusResult["isAutoRenewing"] = false
+                                        statusResult["purchaseState"] = PurchaseStateValue.canceled.rawValue
+                                        statusResult["isOwned"] = false
+                                    } else if status.state == .inGracePeriod {
+                                        statusResult["isAutoRenewing"] = true
+                                        statusResult["purchaseState"] = PurchaseStateValue.purchased.rawValue
+                                    } else {
+                                        statusResult["isAutoRenewing"] = false
+                                    }
+                                    break
+                                }
+                            }
+                        }
+                    }
+                    
+                    break
                 }
-                
-                // Finish the transaction
-                SKPaymentQueue.default().finishTransaction(transaction)
-                
-            case .restored:
-                // Handle restored purchase
-                let purchase = self.createPurchaseObject(from: transaction)
-                if let invoke = self.pendingInvoke {
-                    invoke.resolve(["purchases": [purchase]])
-                    self.pendingInvoke = nil
-                    self.isPurchaseRequest = false
-                    self.currentAppAccountToken = nil
-                }
-                
-                // Finish the transaction
-                SKPaymentQueue.default().finishTransaction(transaction)
-                
-            case .deferred:
-                // Handle deferred purchase (e.g., Ask to Buy)
-                if let invoke = self.pendingInvoke {
-                    invoke.reject("Purchase is pending")
-                    self.pendingInvoke = nil
-                    self.isPurchaseRequest = false
-                    self.currentAppAccountToken = nil
-                }
-                
-            case .purchasing:
-                // Transaction is being processed
-                break
-                
-            @unknown default:
-                break
+            case .unverified(_, _):
+                // Skip unverified transactions
+                continue
             }
         }
+        
+        invoke.resolve(statusResult)
     }
     
-    func paymentQueueRestoreCompletedTransactionsFinished(_ queue: SKPaymentQueue) {
-        // All restore transactions completed
-        if let invoke = self.pendingInvoke {
-            invoke.resolve(["purchases": []])
-            self.pendingInvoke = nil
-            self.isPurchaseRequest = false
-            self.currentAppAccountToken = nil
+    
+    private func createPurchaseObject(from transaction: Transaction, product: Product) async -> [String: Any] {
+        var isAutoRenewing = false
+        
+        // Check if it's an auto-renewable subscription
+        if product.type == .autoRenewable {
+            // Check subscription status
+            if let statuses = try? await product.subscription?.status {
+                for status in statuses {
+                    if status.state == .subscribed {
+                        isAutoRenewing = true
+                        break
+                    }
+                }
+            }
         }
+        
+        return [
+            "orderId": String(transaction.id),
+            "packageName": Bundle.main.bundleIdentifier ?? "",
+            "productId": transaction.productID,
+            "purchaseTime": Int(transaction.purchaseDate.timeIntervalSince1970 * 1000),
+            "purchaseToken": String(transaction.id),
+            "purchaseState": transaction.revocationDate == nil ? 0 : 1,  // 0 = purchased, 1 = canceled
+            "isAutoRenewing": isAutoRenewing,
+            "isAcknowledged": true,  // Always true on iOS
+            "originalJson": "",      // Not available in StoreKit 2
+            "signature": ""          // Not available in StoreKit 2
+        ]
     }
     
-    func paymentQueue(_ queue: SKPaymentQueue, restoreCompletedTransactionsFailedWithError error: Error) {
-        // Restore failed
-        if let invoke = self.pendingInvoke {
-            invoke.reject("Restore failed: \(error.localizedDescription)")
-            self.pendingInvoke = nil
-            self.isPurchaseRequest = false
-            self.currentAppAccountToken = nil
+    private func formatSubscriptionPeriod(_ period: Product.SubscriptionPeriod) -> String {
+        switch period.unit {
+        case .day:
+            return "P\(period.value)D"
+        case .week:
+            return "P\(period.value)W"
+        case .month:
+            return "P\(period.value)M"
+        case .year:
+            return "P\(period.value)Y"
+        @unknown default:
+            return "P1M"
         }
     }
     
