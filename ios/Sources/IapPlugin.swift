@@ -2,6 +2,7 @@ import Tauri
 import UIKit
 import WebKit
 import StoreKit
+import Foundation
 
 class InitializeArgs: Decodable {}
 
@@ -40,28 +41,21 @@ enum PurchaseStateValue: Int {
 
 @available(iOS 15.0, *)
 class IapPlugin: Plugin {
+    private var updateListenerTask: Task<Void, Error>?
     
     public override func load(webview: WKWebView) {
         super.load(webview: webview)
-        
-        // Listen for StoreKit notifications instead of Task
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleStoreKitNotification),
-            name: .storeKitTransactionUpdated,
-            object: nil
-        )
+
+        // // Start listening for transaction updates
+        // updateListenerTask = Task {
+        //     for await update in Transaction.updates {
+        //         await self.handleTransactionUpdate(update)
+        //     }
+        // }
     }
     
     deinit {
-        NotificationCenter.default.removeObserver(self)
-    }
-    
-    @objc private func handleStoreKitNotification(_ notification: Notification) {
-        // Handle transaction updates when they occur
-        // This will be called when StoreKit sends notifications
-        // We'll handle transactions in the individual methods instead
-        print("StoreKit transaction notification received")
+        updateListenerTask?.cancel()
     }
     
     @objc public func initialize(_ invoke: Invoke) throws {
@@ -70,7 +64,9 @@ class IapPlugin: Plugin {
     }
     
     @objc public func getProducts(_ invoke: Invoke) throws {
-        try await self.getProducts(invoke)
+        Task {
+            try await self.getProducts(invoke)
+        }
     }
 
     public func getProducts(_ invoke: Invoke) async throws {
@@ -148,7 +144,9 @@ class IapPlugin: Plugin {
     }
     
     @objc public func purchase(_ invoke: Invoke) throws {
-        try await self.purchase(invoke)
+        Task {
+            try await self.purchase(invoke)
+        }
     }
 
     public func purchase(_ invoke: Invoke) async throws {
@@ -186,10 +184,6 @@ class IapPlugin: Plugin {
                     await transaction.finish()
                     
                     let purchase = await createPurchaseObject(from: transaction, product: product)
-                    
-                    // Emit purchase updated event
-                    trigger("purchaseUpdated", data: purchase as! JSObject)
-                    
                     invoke.resolve(purchase)
                     
                 case .unverified(_, _):
@@ -211,7 +205,9 @@ class IapPlugin: Plugin {
     }
     
     @objc public func restorePurchases(_ invoke: Invoke) throws {
-        try await self.restorePurchases(invoke)
+        Task {
+            try await self.restorePurchases(invoke)
+        }
     }
 
     public func restorePurchases(_ invoke: Invoke) async throws {
@@ -259,7 +255,9 @@ class IapPlugin: Plugin {
     }
 
     @objc public func getPurchaseHistory(_ invoke: Invoke) throws {
-        try await self.getPurchaseHistory(invoke)
+        Task {
+            try await self.getPurchaseHistory(invoke)
+        }
     }
 
     public func getPurchaseHistory(_ invoke: Invoke) async throws {
@@ -296,7 +294,9 @@ class IapPlugin: Plugin {
     }
     
     @objc public func getProductStatus(_ invoke: Invoke) throws {
-        try await self.getProductStatus(invoke)
+        Task {
+            try await self.getProductStatus(invoke)
+        }
     }
 
     public func getProductStatus(_ invoke: Invoke) async throws {
@@ -369,6 +369,25 @@ class IapPlugin: Plugin {
         invoke.resolve(statusResult)
     }
     
+    private func handleTransactionUpdate(_ result: VerificationResult<Transaction>) async {
+        switch result {
+        case .verified(let transaction):
+            // Get product details
+            if let product = try? await Product.products(for: [transaction.productID]).first {
+                let purchase = await createPurchaseObject(from: transaction, product: product)
+                
+                // Emit event - convert to JSObject-compatible format
+                trigger("purchaseUpdated", data: purchase as! JSObject)
+            }
+            
+            // Always finish transactions
+            await transaction.finish()
+            
+        case .unverified(_, _):
+            // Handle unverified transaction
+            break
+        }
+    }
     
     private func createPurchaseObject(from transaction: Transaction, product: Product) async -> [String: Any] {
         var isAutoRenewing = false
