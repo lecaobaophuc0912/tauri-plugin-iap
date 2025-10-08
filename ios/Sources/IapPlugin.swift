@@ -296,8 +296,8 @@ class IapPlugin: Plugin, SKProductsRequestDelegate, SKPaymentTransactionObserver
             "purchaseTime": Int(transaction.transactionDate?.timeIntervalSince1970 ?? 0 * 1000),
             "purchaseToken": transaction.transactionIdentifier ?? "",
             "purchaseState": transaction.transactionState == .purchased ? 0 : 1,
-            "isAutoRenewing": nil, // StoreKit 1 doesn't provide this info directly
-            "isAcknowledged": nil,
+            "isAutoRenewing": false, // StoreKit 1 doesn't provide this info directly
+            "isAcknowledged": false,
             "originalJson": "", // Not available in StoreKit 1
             "signature": ""      // Not available in StoreKit 1
         ]
